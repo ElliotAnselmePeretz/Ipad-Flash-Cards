@@ -9,11 +9,32 @@ struct CardListView: View {
     @State private var editingCard: StoredCard?
 
     private var cards: [StoredCard] {
+        // Suspended cards stay listed — they are out of the review queue, not gone.
         deck.cards.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var suspendedCount: Int { cards.filter(\.isSuspended).count }
+
+    private func badge(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(tint.opacity(0.18)))
+            .foregroundStyle(tint)
     }
 
     var body: some View {
         List {
+            if suspendedCount > 0 {
+                Section {
+                    Label("^[\(suspendedCount) card](inflect: true) paused after too many lapses. "
+                          + "Rewrite them, then swipe right to resume.",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             ForEach(cards) { card in
                 NavigationLink(value: card) {
                     HStack {
@@ -21,13 +42,30 @@ struct CardListView: View {
                             Text(card.frontText.isEmpty ? "(handwritten)" : card.frontText)
                                 .font(.headline)
                                 .foregroundStyle(card.frontText.isEmpty ? .secondary : .primary)
-                            Text(statusLabel(card)).font(.caption).foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Text(statusLabel(card)).font(.caption).foregroundStyle(.secondary)
+                                if card.isLeech { badge("Leech", tint: .orange) }
+                                if card.isSuspended { badge("Paused", tint: .secondary) }
+                            }
                         }
                         Spacer()
                         if card.frontDrawing != nil || card.backDrawing != nil {
                             Image(systemName: "pencil.and.scribble").foregroundStyle(.tertiary)
                         }
                     }
+                    .opacity(card.isSuspended ? 0.55 : 1)
+                }
+                // A suspended card has to be recoverable, or it is just gone.
+                .swipeActions(edge: .leading) {
+                    Button {
+                        card.isSuspended.toggle()
+                        if !card.isSuspended { card.isLeech = false }
+                        try? context.save()
+                    } label: {
+                        Label(card.isSuspended ? "Resume" : "Pause",
+                              systemImage: card.isSuspended ? "play.circle" : "pause.circle")
+                    }
+                    .tint(card.isSuspended ? .green : .orange)
                 }
             }
             .onDelete { indexSet in

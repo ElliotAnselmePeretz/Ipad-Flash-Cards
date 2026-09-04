@@ -13,6 +13,7 @@ struct StudyView: View {
     @State private var session: StudySession?
     @State private var isEditingCards = false
     @State private var flipped = false
+    @State private var leechNotice: String?
 
     var body: some View {
         ZStack {
@@ -34,6 +35,23 @@ struct StudyView: View {
                 } else {
                     ProgressView()
                 }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let leechNotice {
+                // A card leaving the rotation is worth saying out loud, not doing silently.
+                Label(leechNotice, systemImage: "exclamationmark.triangle.fill")
+                    .font(Theme.body(15))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.smallCorner, style: .continuous)
+                            .fill(Theme.surface(scheme))
+                            .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                    )
+                    .foregroundStyle(Theme.hard(scheme))
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .navigationTitle(deck.name)
@@ -239,9 +257,19 @@ struct StudyView: View {
     }
 
     private func grade(_ session: StudySession, _ answer: Answer) {
+        let leechesBefore = session.leechCount
         withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
             flipped = false
             session.grade(answer.grade)
+        }
+        if session.leechCount > leechesBefore {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                leechNotice = "You keep forgetting that one, so it is paused. Rewrite it under Cards."
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                withAnimation { leechNotice = nil }
+            }
         }
     }
 
