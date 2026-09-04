@@ -7,10 +7,13 @@ import FlashcardsCore
 // Scheduling fields are stored FLAT rather than as a nested Codable value: SwiftData
 // can persist a Codable struct, but #Predicate can't reach inside one, and "fetch the
 // cards due before now" is the single most important query in the app.
+//
+// Ids are UUIDs generated on creation rather than declared with #Unique, which needs
+// iOS 18 and would have to go anyway if this ever moves to CloudKit — CloudKit doesn't
+// enforce unique constraints.
 
 @Model
 final class StoredProfile {
-    #Unique<StoredProfile>([\.id])
     var id: UUID = UUID()
     var name: String = ""
     var avatar: String = "person.circle"
@@ -33,7 +36,6 @@ final class StoredProfile {
 
 @Model
 final class StoredDeck {
-    #Unique<StoredDeck>([\.id])
     var id: UUID = UUID()
     var name: String = ""
     var newCardsPerDay: Int = 20
@@ -72,7 +74,6 @@ final class StoredDeck {
 
 @Model
 final class StoredCard {
-    #Unique<StoredCard>([\.id])
     var id: UUID = UUID()
 
     var frontText: String = ""
@@ -172,7 +173,6 @@ final class StoredCard {
 
 @Model
 final class StoredReviewLog {
-    #Unique<StoredReviewLog>([\.id])
     var id: UUID = UUID()
     var reviewedAt: Date = Date()
     var gradeRaw: Int = 0

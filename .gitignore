@@ -27,3 +27,7 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# Xcode project user state (the project and shared scheme are committed)
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
