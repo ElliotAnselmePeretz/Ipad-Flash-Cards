@@ -118,3 +118,59 @@ struct QuietButtonStyle: ButtonStyle {
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
+
+/// A slow, soft halo. Deliberately restrained: it breathes over three seconds and never
+/// exceeds a faint bloom, so it reads as warmth rather than a notification.
+struct SoftGlow: ViewModifier {
+    var color: Color
+    var active: Bool = true
+    var maxOpacity: Double = 0.28
+
+    @State private var pulse = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                    .fill(color)
+                    .blur(radius: 26)
+                    .opacity(active ? (pulse ? maxOpacity : maxOpacity * 0.4) : 0)
+                    .scaleEffect(pulse ? 1.015 : 0.995)
+                    .animation(.easeInOut(duration: 3).repeatForever(autoreverses: true), value: pulse)
+                    .allowsHitTesting(false)
+            )
+            .onAppear { pulse = true }
+    }
+}
+
+extension View {
+    /// Adds the app's ambient glow behind a surface.
+    func softGlow(_ color: Color, active: Bool = true, maxOpacity: Double = 0.28) -> some View {
+        modifier(SoftGlow(color: color, active: active, maxOpacity: maxOpacity))
+    }
+}
+
+/// A small warm statistic, used to stop screens feeling bare.
+struct StatChip: View {
+    @Environment(\.colorScheme) private var scheme
+    let value: String
+    let label: String
+    var tint: Color?
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(tint ?? Theme.ink(scheme))
+            Text(label)
+                .font(Theme.body(12))
+                .foregroundStyle(Theme.softInk(scheme))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.smallCorner, style: .continuous)
+                .fill((tint ?? Theme.ink(scheme)).opacity(0.07))
+        )
+    }
+}

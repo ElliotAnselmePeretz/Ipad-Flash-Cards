@@ -6,8 +6,24 @@ import PencilKit
 /// PencilKit supplies the ink pipeline — pressure, tilt, low latency and, crucially,
 /// palm rejection. The tool *interface* is ours: Apple's `PKToolPicker` is never shown,
 /// so the app doesn't look like Notes.
+/// Lets a parent view drive the canvas: undo, redo, erase everything. PencilKit keeps its
+/// own undo stack per canvas, so this just exposes what is already there.
+@Observable
+final class InkCanvasController {
+    weak var canvas: PKCanvasView?
+
+    var canUndo: Bool { canvas?.undoManager?.canUndo ?? false }
+    var canRedo: Bool { canvas?.undoManager?.canRedo ?? false }
+
+    func undo() { canvas?.undoManager?.undo() }
+    func redo() { canvas?.undoManager?.redo() }
+    func clear() { canvas?.drawing = PKDrawing() }
+}
+
 struct DrawingCanvas: UIViewRepresentable {
     @Binding var data: Data?
+
+    var controller: InkCanvasController?
 
     var tool: InkTool = .pen
     var color: InkColor = .ink
@@ -58,6 +74,7 @@ struct DrawingCanvas: UIViewRepresentable {
         }
 
         context.coordinator.apply(tool: tool, color: color, width: width, to: canvas)
+        controller?.canvas = canvas
         return canvas
     }
 

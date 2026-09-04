@@ -5,14 +5,15 @@ import FlashcardsCore
 
 /// Writing a deck by hand, without leaving the pen.
 ///
-/// The ordinary editor costs six taps per card: Add, write, switch side, write, Save,
-/// Add again. That is fine for one card and miserable for fifty. Here the question and
-/// answer are two steps of one loop, and finishing a card immediately opens the next.
+/// Deliberately shaped like the study screen: the same warm raised card, the same
+/// QUESTION / ANSWER label. What you write on is what you will later be shown, so the two
+/// screens should read as the same object seen from two sides.
 struct RapidCaptureView: View {
     let deck: StoredDeck
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
 
     private enum Step { case question, answer }
 
@@ -20,12 +21,11 @@ struct RapidCaptureView: View {
     @State private var questionInk: Data?
     @State private var answerInk: Data?
     @State private var createdCount = 0
-    /// Forces a fresh PKCanvasView between steps so ink never bleeds across sides.
     @State private var canvasGeneration = 0
     @State private var tool: InkTool = .pen
     @State private var inkColor: InkColor = .ink
     @State private var inkWidth: InkWidth = .medium
-    @Environment(\.colorScheme) private var scheme
+    @State private var controller = InkCanvasController()
 
     private var currentInk: Binding<Data?> {
         step == .question ? $questionInk : $answerInk
@@ -35,29 +35,29 @@ struct RapidCaptureView: View {
         PKDrawing.hasStrokes(step == .question ? questionInk : answerInk)
     }
 
+    private var accent: Color {
+        step == .question ? Theme.accent(scheme) : Theme.easy(scheme)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: step)
+        ZStack {
+            Theme.page(scheme).ignoresSafeArea()
 
-            ZStack(alignment: .topLeading) {
-                DrawingCanvas(
-                    data: currentInk, tool: tool, color: inkColor, width: inkWidth,
-                    onFlip: { withAnimation(.snappy) { flipSide() } }
-                )
-                .id(canvasGeneration)
+            VStack(spacing: 16) {
+                progress
 
-                if !canAdvance {
-                    Text(step == .question ? "Write the question" : "Write the answer")
-                        .font(Theme.title(22))
-                        .foregroundStyle(Theme.softInk(scheme).opacity(0.6))
-                        .padding(24)
-                        .allowsHitTesting(false)
-                }
+                writingCard
+                    .frame(maxWidth: 760)
+                    .padding(.horizontal, 22)
+
+                InkToolbar(tool: $tool, color: $inkColor, width: $inkWidth)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.smallCorner, style: .continuous))
+                    .padding(.horizontal, 22)
+
+                controls
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 18)
             }
-
-            InkToolbar(tool: $tool, color: $inkColor, width: $inkWidth)
-            controls
         }
         .navigationTitle("Write cards")
         .navigationBarTitleDisplayMode(.inline)
@@ -68,65 +68,146 @@ struct RapidCaptureView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            Label(step == .question ? "Question" : "Answer",
-                  systemImage: step == .question ? "questionmark.circle" : "checkmark.circle")
-                .font(Theme.label(17))
-                .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(step == .question ? Color.accentColor : .green)
-                .accessibilityIdentifier("rapid.step")
+    // MARK: - Header
 
-            Spacer()
-
-            Text("^[\(createdCount) card](inflect: true) written")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .accessibilityIdentifier("rapid.count")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
-    }
-
-    private var controls: some View {
-        HStack(spacing: 12) {
-            Button("Clear", systemImage: "trash") { clearCurrent() }
-                .disabled(!canAdvance)
-                .accessibilityIdentifier("rapid.clear")
-
-            if step == .answer {
-                Button("Back to question", systemImage: "arrow.uturn.backward") {
-                    step = .question
-                    canvasGeneration += 1
-                }
-                .accessibilityIdentifier("rapid.back")
+    /// Two dots showing which half of the card you are on, plus a running tally. The
+    /// screen used to be a bare canvas; this gives it somewhere to start and a sense of
+    /// progress across a session.
+    private var progress: some View {
+        HStack(spacing: 16) {
+            HStack(spacing: 7) {
+                stepDot(filled: true, done: step == .answer)
+                Rectangle()
+                    .fill(step == .answer ? accent : Theme.softInk(scheme).opacity(0.25))
+                    .frame(width: 26, height: 2)
+                stepDot(filled: step == .answer, done: false)
             }
 
+            Text(step == .question ? "Question" : "Answer")
+                .font(Theme.label(17))
+                .foregroundStyle(accent)
+                .contentTransition(.numericText())
+
             Spacer()
+
+            if createdCount > 0 {
+                Label("^[\(createdCount) card](inflect: true)", systemImage: "checkmark.circle.fill")
+                    .font(Theme.body(14))
+                    .foregroundStyle(Theme.easy(scheme))
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 26)
+        .padding(.top, 10)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: step)
+        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: createdCount)
+    }
+
+    private func stepDot(filled: Bool, done: Bool) -> some View {
+        Circle()
+            .fill(filled ? accent : Theme.softInk(scheme).opacity(0.25))
+            .frame(width: 9, height: 9)
+    }
+
+    // MARK: - Card
+
+    private var writingCard: some View {
+        WarmCard(padding: 22) {
+            VStack(spacing: 12) {
+                Text(step == .question ? "QUESTION" : "ANSWER")
+                    .font(Theme.label(11))
+                    .tracking(1.4)
+                    .foregroundStyle(Theme.softInk(scheme))
+
+                ZStack {
+                    DrawingCanvas(
+                        data: currentInk,
+                        controller: controller,
+                        tool: tool, color: inkColor, width: inkWidth,
+                        onFlip: { withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { flipSide() } }
+                    )
+                    .id(canvasGeneration)
+
+                    if !canAdvance {
+                        VStack(spacing: 8) {
+                            Image(systemName: step == .question ? "questionmark.bubble" : "lightbulb")
+                                .font(.system(size: 30, weight: .light))
+                            Text(step == .question ? "Write the question" : "Write the answer")
+                                .font(Theme.title(19))
+                            Text("Tap with a finger to flip sides")
+                                .font(Theme.body(13))
+                                .opacity(0.7)
+                        }
+                        .foregroundStyle(Theme.softInk(scheme).opacity(0.55))
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                    }
+                }
+                .frame(minHeight: 300)
+            }
+        }
+        // The glow appears only once the side has ink, so it reads as quiet encouragement.
+        .softGlow(accent, active: canAdvance, maxOpacity: 0.22)
+        .animation(.easeInOut(duration: 0.45), value: canAdvance)
+    }
+
+    // MARK: - Controls
+
+    private var controls: some View {
+        HStack(spacing: 10) {
+            Button { controller.undo() } label: {
+                Image(systemName: "arrow.uturn.backward").frame(width: 22)
+            }
+            .buttonStyle(QuietButtonStyle())
+            .accessibilityLabel("Undo stroke")
+
+            Button { controller.redo() } label: {
+                Image(systemName: "arrow.uturn.forward").frame(width: 22)
+            }
+            .buttonStyle(QuietButtonStyle())
+            .accessibilityLabel("Redo stroke")
+
+            Button { clearCurrent() } label: {
+                Image(systemName: "trash").frame(width: 22)
+            }
+            .buttonStyle(QuietButtonStyle())
+            .disabled(!canAdvance)
+            .accessibilityIdentifier("rapid.clear")
+
+            if step == .answer {
+                Button { withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { flipSide() } } label: {
+                    Label("Question", systemImage: "arrow.left")
+                        .font(Theme.body(15))
+                }
+                .buttonStyle(QuietButtonStyle())
+                .accessibilityIdentifier("rapid.back")
+                .transition(.opacity.combined(with: .move(edge: .leading)))
+            }
+
+            Spacer(minLength: 0)
 
             Button {
                 advance()
             } label: {
-                Label(step == .question ? "Write answer" : "Save and write next",
-                      systemImage: step == .question ? "arrow.right" : "checkmark")
-                    .font(.body.weight(.semibold))
-                    .frame(minWidth: 200)
-                    .padding(.vertical, 6)
+                HStack(spacing: 7) {
+                    Text(step == .question ? "Write answer" : "Save card")
+                    Image(systemName: step == .question ? "arrow.right" : "checkmark")
+                }
+                .font(Theme.label(17))
+                .frame(minWidth: 190)
+                .padding(.vertical, 13)
             }
-            .buttonStyle(SpringyButtonStyle(tint: canAdvance ? Theme.accent(scheme) : Theme.softInk(scheme).opacity(0.3)))
+            .buttonStyle(SpringyButtonStyle(
+                tint: canAdvance ? accent : Theme.softInk(scheme).opacity(0.25)
+            ))
             .disabled(!canAdvance)
             .accessibilityIdentifier("rapid.advance")
         }
-        .padding(14)
-        .background(.regularMaterial)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: step)
     }
 
     // MARK: - Actions
 
-    /// A finger tap or swipe moves between the two sides of the card being written,
-    /// without committing anything.
     private func flipSide() {
         step = step == .question ? .answer : .question
         canvasGeneration += 1
@@ -139,16 +220,18 @@ struct RapidCaptureView: View {
 
     private func advance() {
         guard canAdvance else { return }
-        if step == .question {
-            step = .answer
-        } else {
-            saveCard()
-            step = .question
-            questionInk = nil
-            answerInk = nil
-            createdCount += 1
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            if step == .question {
+                step = .answer
+            } else {
+                saveCard()
+                step = .question
+                questionInk = nil
+                answerInk = nil
+                createdCount += 1
+            }
+            canvasGeneration += 1
         }
-        canvasGeneration += 1
     }
 
     private func saveCard() {
