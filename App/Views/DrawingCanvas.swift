@@ -1,21 +1,39 @@
 import SwiftUI
 import PencilKit
 
-/// Wraps `PKCanvasView`. This one type is the whole Apple Pencil story: pressure, tilt,
-/// palm rejection, the low-latency ink pipeline, the double-tap-to-erase gesture and
-/// undo all come from PencilKit for free.
+/// Wraps `PKCanvasView`.
+///
+/// PencilKit supplies the ink pipeline — pressure, tilt, low latency and, crucially,
+/// palm rejection. The tool *interface* is ours: Apple's `PKToolPicker` is never shown,
+/// so the app doesn't look like Notes.
 struct DrawingCanvas: UIViewRepresentable {
     @Binding var data: Data?
-    /// Show the system tool palette (pens, eraser, colours, ruler).
-    var showsToolPicker: Bool = true
+
+    var tool: InkTool = .pen
+    var color: InkColor = .ink
+    var width: InkWidth = .medium
     var isReadOnly: Bool = false
-    /// Set false to let a finger draw too; true means Pencil-only, finger scrolls.
+
+    /// Pencil-only is the whole palm-rejection story: with `.pencilOnly`, iPadOS routes
+    /// every non-Pencil touch — finger, knuckle, resting palm, forearm — away from the ink
+    /// pipeline, so a hand on the glass can never leave a mark. It also frees finger
+    /// gestures for navigation, which is what lets a tap flip the card.
     var pencilOnly: Bool = true
+
+    /// Called when a finger taps, or swipes left/right, on the canvas.
+    var onFlip: (() -> Void)?
+
+    /// UI tests cannot synthesise Apple Pencil input, so they opt into finger drawing
+    /// through a launch argument. Nothing ships with this enabled.
+    private var effectivePencilOnly: Bool {
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing-allow-finger") { return false }
+        return pencilOnly
+    }
 
     func makeUIView(context: Context) -> PKCanvasView {
         let canvas = PKCanvasView()
         canvas.delegate = context.coordinator
-        canvas.drawingPolicy = pencilOnly ? .pencilOnly : .anyInput
+        canvas.drawingPolicy = effectivePencilOnly ? .pencilOnly : .anyInput
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
         canvas.alwaysBounceVertical = false
@@ -24,33 +42,62 @@ struct DrawingCanvas: UIViewRepresentable {
         if let data, let drawing = try? PKDrawing(data: data) {
             canvas.drawing = drawing
         }
-        context.coordinator.canvas = canvas
+
+        if onFlip != nil {
+            // Finger gestures are free precisely because the pen owns the ink.
+            let tap = UITapGestureRecognizer(target: context.coordinator,
+                                             action: #selector(Coordinator.handleFlip))
+            tap.numberOfTapsRequired = 1
+            for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
+                let swipe = UISwipeGestureRecognizer(target: context.coordinator,
+                                                     action: #selector(Coordinator.handleFlip))
+                swipe.direction = direction
+                canvas.addGestureRecognizer(swipe)
+            }
+            canvas.addGestureRecognizer(tap)
+        }
+
+        context.coordinator.apply(tool: tool, color: color, width: width, to: canvas)
         return canvas
     }
 
     func updateUIView(_ canvas: PKCanvasView, context: Context) {
         context.coordinator.parent = self
         canvas.isUserInteractionEnabled = !isReadOnly
-        canvas.drawingPolicy = pencilOnly ? .pencilOnly : .anyInput
+        canvas.drawingPolicy = effectivePencilOnly ? .pencilOnly : .anyInput
 
         // Only push external changes in; never stomp on ink the user is mid-stroke on.
         let incoming = data.flatMap { try? PKDrawing(data: $0) } ?? PKDrawing()
-        if !context.coordinator.isEditing, canvas.drawing.dataRepresentation() != incoming.dataRepresentation() {
+        if !context.coordinator.isEditing,
+           canvas.drawing.dataRepresentation() != incoming.dataRepresentation() {
             canvas.drawing = incoming
         }
 
-        context.coordinator.setToolPickerVisible(showsToolPicker && !isReadOnly, for: canvas)
+        context.coordinator.apply(tool: tool, color: color, width: width, to: canvas)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         var parent: DrawingCanvas
-        weak var canvas: PKCanvasView?
-        private var toolPicker: PKToolPicker?
         var isEditing = false
 
         init(_ parent: DrawingCanvas) { self.parent = parent }
+
+        func apply(tool: InkTool, color: InkColor, width: InkWidth, to canvas: PKCanvasView) {
+            guard let inkType = tool.inkType else {
+                canvas.tool = PKEraserTool(.bitmap)
+                return
+            }
+            let style = canvas.traitCollection.userInterfaceStyle
+            canvas.tool = PKInkingTool(inkType,
+                                       color: color.uiColor(for: style),
+                                       width: width.points(for: tool))
+        }
+
+        @objc func handleFlip() {
+            parent.onFlip?()
+        }
 
         func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) { isEditing = true }
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) { isEditing = false }
@@ -59,15 +106,15 @@ struct DrawingCanvas: UIViewRepresentable {
             let encoded = canvasView.drawing.dataRepresentation()
             if parent.data != encoded { parent.data = encoded }
         }
+    }
+}
 
-        func setToolPickerVisible(_ visible: Bool, for canvas: PKCanvasView) {
-            guard let window = canvas.window else { return }
-            let picker = toolPicker ?? PKToolPicker.shared(for: window) ?? PKToolPicker()
-            toolPicker = picker
-            picker.setVisible(visible, forFirstResponder: canvas)
-            picker.addObserver(canvas)
-            if visible { canvas.becomeFirstResponder() }
-        }
+extension PKDrawing {
+    /// Serialised ink is never zero bytes, so "did they actually write something?" has to
+    /// ask about strokes rather than about the size of the Data.
+    static func hasStrokes(_ data: Data?) -> Bool {
+        guard let data, let drawing = try? PKDrawing(data: data) else { return false }
+        return !drawing.strokes.isEmpty
     }
 }
 
@@ -76,12 +123,14 @@ struct DrawingThumbnail: View {
     let data: Data?
     var height: CGFloat = 120
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         GeometryReader { geo in
             if let data, let drawing = try? PKDrawing(data: data), !drawing.bounds.isEmpty {
                 let bounds = drawing.bounds
                 let scale = min(geo.size.width / bounds.width, geo.size.height / bounds.height, 1)
-                Image(uiImage: drawing.image(from: bounds, scale: UIScreen.main.scale))
+                Image(uiImage: render(drawing, in: bounds))
                     .resizable()
                     .scaledToFit()
                     .frame(width: bounds.width * scale, height: bounds.height * scale)
@@ -91,5 +140,16 @@ struct DrawingThumbnail: View {
             }
         }
         .frame(height: height)
+    }
+
+    /// PencilKit renders ink for a trait environment, so a drawing made in light mode has
+    /// to be rasterised with the current style or dark-mode handwriting comes out invisible.
+    private func render(_ drawing: PKDrawing, in bounds: CGRect) -> UIImage {
+        let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+        var image = UIImage()
+        traits.performAsCurrent {
+            image = drawing.image(from: bounds, scale: UIScreen.main.scale)
+        }
+        return image
     }
 }

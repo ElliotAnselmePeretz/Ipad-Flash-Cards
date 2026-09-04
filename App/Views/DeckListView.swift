@@ -2,11 +2,13 @@ import SwiftUI
 import SwiftData
 import FlashcardsCore
 
+
 struct DeckListView: View {
     let profile: StoredProfile
-    let onSwitchProfile: () -> Void
 
     @Environment(\.modelContext) private var context
+    @AppStorage("appearance") private var appearance = Appearance.system
+    @Environment(\.colorScheme) private var scheme
     @State private var newDeckName = ""
     @State private var isAddingDeck = false
 
@@ -16,32 +18,59 @@ struct DeckListView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(decks) { deck in
-                    NavigationLink {
-                        StudyView(deck: deck)
-                    } label: {
-                        DeckRow(deck: deck)
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(Array(decks.enumerated()), id: \.element.id) { index, deck in
+                        NavigationLink {
+                            StudyView(deck: deck)
+                        } label: {
+                            WarmCard(padding: 18) { DeckRow(deck: deck) }
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    deck.deletedAt = Date()
+                                    try? context.save()
+                                }
+                            }
+                        }
+                        // Decks fan in on appearance rather than snapping into place.
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(.spring(response: 0.45, dampingFraction: 0.82)
+                                    .delay(Double(index) * 0.04), value: decks.count)
                     }
                 }
-                .onDelete { indexSet in
-                    for index in indexSet { decks[index].deletedAt = Date() }
-                    try? context.save()
-                }
+                .padding(20)
             }
-            .navigationTitle(profile.name)
+            .background(Theme.page(scheme))
+            .navigationTitle("Decks")
             .overlay {
                 if decks.isEmpty {
-                    ContentUnavailableView(
-                        "No decks yet",
-                        systemImage: "rectangle.stack",
-                        description: Text("Create a deck to start writing cards.")
-                    )
+                    ContentUnavailableView {
+                        Label("No decks yet", systemImage: "rectangle.stack")
+                    } description: {
+                        Text("Create a deck to start writing cards.")
+                    } actions: {
+                        Button("Add the sample deck") {
+                            SampleDeck.add(to: profile, in: context)
+                        }
+                        .accessibilityIdentifier("decks.addSample")
+                    }
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Switch profile", systemImage: "person.crop.circle", action: onSwitchProfile)
+                    Menu {
+                        Picker("Appearance", selection: $appearance) {
+                            ForEach(Appearance.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                    } label: {
+                        Label("Appearance", systemImage: "circle.lefthalf.filled")
+                    }
+                    .accessibilityIdentifier("decks.appearance")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("New deck", systemImage: "plus") { isAddingDeck = true }
@@ -66,6 +95,7 @@ struct DeckListView: View {
 
 private struct DeckRow: View {
     let deck: StoredDeck
+    @Environment(\.colorScheme) private var scheme
 
     private var counts: QueueCounts {
         ReviewQueue(deck: deck.core).counts(from: deck.cards.map(\.core))
@@ -74,9 +104,9 @@ private struct DeckRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(deck.name).font(.headline)
+                Text(deck.name).font(Theme.display(20))
                 Text("^[\(deck.cards.filter { $0.deletedAt == nil }.count) card](inflect: true)")
-                    .font(.subheadline)
+                    .font(Theme.body(14))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -98,7 +128,7 @@ struct CountPill: View {
 
     var body: some View {
         Text("\(value)")
-            .font(.callout.weight(.semibold).monospacedDigit())
+            .font(.system(size: 16, weight: .semibold, design: .rounded).monospacedDigit())
             .foregroundStyle(value == 0 ? Color.secondary : color)
             .accessibilityLabel("\(value) \(label)")
     }

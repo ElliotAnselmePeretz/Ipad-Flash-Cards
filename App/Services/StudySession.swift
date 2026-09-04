@@ -20,8 +20,20 @@ final class StudySession {
     private(set) var stage: Stage = .question
     private(set) var completedCount = 0
 
-    /// The learner's handwritten attempt at the current card.
-    var attemptDrawing: Data?
+
+    /// Everything needed to put the last graded card back exactly as it was. A mistap on
+    /// a four-button row is easy and would otherwise reschedule a card for months.
+    private struct GradedStep {
+        let card: StoredCard
+        let previousState: SchedulingState
+        let log: StoredReviewLog
+        /// Whether grading pushed the card back into this session (an "Again" answer).
+        let wasRequeued: Bool
+    }
+
+    private var lastStep: GradedStep?
+
+    var canUndo: Bool { lastStep != nil }
 
     private let deck: StoredDeck
     private let context: ModelContext
@@ -76,7 +88,7 @@ final class StudySession {
         let after = scheduler.review(before, grade: grade, now: now)
         card.scheduling = after
 
-        context.insert(StoredReviewLog(
+        let log = StoredReviewLog(
             card: card,
             reviewedAt: now,
             grade: grade,
@@ -84,18 +96,20 @@ final class StudySession {
             intervalAfter: after.intervalDays,
             easeAfter: after.easeFactor,
             durationSeconds: now.timeIntervalSince(shownAt),
-            attemptDrawing: attemptDrawing
-        ))
+            attemptDrawing: nil
+        )
+        context.insert(log)
 
         completedCount += 1
-        attemptDrawing = nil
         queue.removeFirst()
 
         // A card answered "again" comes back in minutes, so put it back in this session
         // once its short step elapses rather than making the learner restart the deck.
-        if !after.isGraduated || after.dueDate.timeIntervalSince(now) < 600 {
-            insertByDueDate(card)
-        }
+        let requeued = !after.isGraduated || after.dueDate.timeIntervalSince(now) < 600
+        if requeued { insertByDueDate(card) }
+
+        lastStep = GradedStep(card: card, previousState: before, log: log,
+                              wasRequeued: requeued)
 
         try? context.save()
         recountBuckets(now: now)
@@ -103,12 +117,34 @@ final class StudySession {
         shownAt = now
     }
 
+    /// Put the last graded card back exactly as it was, ready to be answered again.
+    func undoLastGrade() {
+        guard let step = lastStep else { return }
+
+        // Take the card out of wherever grading left it before restoring its state.
+        if step.wasRequeued, let index = queue.firstIndex(where: { $0.id == step.card.id }) {
+            queue.remove(at: index)
+        }
+
+        step.card.scheduling = step.previousState
+        context.delete(step.log)
+
+        queue.insert(step.card, at: 0)
+        completedCount = max(0, completedCount - 1)
+        lastStep = nil
+
+        try? context.save()
+        recountBuckets(now: Date())
+        // Return to the answer, so the learner can simply pick a different button.
+        stage = .answer
+        shownAt = Date()
+    }
+
     /// Skip without grading — the card stays due.
     func skip() {
         guard !queue.isEmpty else { return }
         let card = queue.removeFirst()
         queue.append(card)
-        attemptDrawing = nil
         stage = .question
         shownAt = Date()
     }

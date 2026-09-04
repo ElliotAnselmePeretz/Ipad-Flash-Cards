@@ -47,6 +47,13 @@ struct CardListView: View {
             ToolbarItem(placement: .topBarLeading) { Button("Done") { dismiss() } }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
+                    RapidCaptureView(deck: deck)
+                } label: {
+                    Label("Write cards", systemImage: "pencil.and.scribble")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
                     ImportView(deck: deck)
                 } label: {
                     Label("Import", systemImage: "square.and.arrow.down")
@@ -80,42 +87,62 @@ struct CardListView: View {
     }
 }
 
-/// Edit both sides. Each side takes typed text, Pencil ink, or both.
+/// Edit a card. Both sides are handwritten — there is no typing here.
+///
+/// Typed text only ever arrives through CSV import, so an imported question is shown
+/// above the canvas as a read-only caption rather than an editable field.
 struct CardEditorView: View {
     @Bindable var card: StoredCard
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @State private var side: Side = .front
+    @Environment(\.colorScheme) private var scheme
 
-    enum Side: String, CaseIterable { case front = "Front", back = "Answer" }
+    @State private var side: Side = .front
+    @State private var tool: InkTool = .pen
+    @State private var inkColor: InkColor = .ink
+    @State private var inkWidth: InkWidth = .medium
+
+    enum Side: String, CaseIterable { case front = "Question", back = "Answer" }
+
+    private var importedCaption: String {
+        side == .front ? card.frontText : card.backText
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Side", selection: $side) {
-                ForEach(Side.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("sidePicker")
-            .padding()
+        ZStack {
+            Theme.page(scheme).ignoresSafeArea()
 
-            TextField(side == .front ? "Question (optional)" : "Answer (optional)",
-                      text: side == .front ? $card.frontText : $card.backText,
-                      axis: .vertical)
-                .font(.system(.title3, design: .serif))
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .padding(.horizontal)
+            VStack(spacing: 0) {
+                Picker("Side", selection: $side) {
+                    ForEach(Side.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("sidePicker")
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
-            Divider().padding(.top, 8)
+                if !importedCaption.isEmpty {
+                    Text(importedCaption)
+                        .font(Theme.title(22))
+                        .foregroundStyle(Theme.ink(scheme))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                        .transition(.opacity)
+                }
 
-            ZStack {
-                RuledPaper()
                 DrawingCanvas(
                     data: side == .front ? $card.frontDrawing : $card.backDrawing,
-                    showsToolPicker: true
+                    tool: tool, color: inkColor, width: inkWidth,
+                    onFlip: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        side = side == .front ? .back : .front
+                    } }
                 )
+                .id(side)
+
+                InkToolbar(tool: $tool, color: $inkColor, width: $inkWidth)
             }
-            .id(side)   // fresh canvas per side
         }
         .navigationTitle("Edit card")
         .navigationBarTitleDisplayMode(.inline)

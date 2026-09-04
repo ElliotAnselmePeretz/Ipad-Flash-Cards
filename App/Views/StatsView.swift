@@ -37,6 +37,16 @@ struct StatsView: View {
         return grouped.map { (date: $0.key, count: $0.value.count) }.sorted { $0.date < $1.date }
     }
 
+    private var thirtyDaysAgo: Date {
+        let cal = Calendar.current
+        return cal.date(byAdding: .day, value: -30, to: cal.startOfDay(for: Date())) ?? Date()
+    }
+
+    private var thirtyDaysAhead: Date {
+        let cal = Calendar.current
+        return cal.date(byAdding: .day, value: 30, to: cal.startOfDay(for: Date())) ?? Date()
+    }
+
     private var retention: Double? {
         let graded = logs.filter { $0.intervalBefore > 0 }
         guard !graded.isEmpty else { return nil }
@@ -68,19 +78,39 @@ struct StatsView: View {
             }
 
             Section("Reviews, last 30 days") {
-                Chart(history, id: \.date) { day in
-                    BarMark(x: .value("Day", day.date, unit: .day), y: .value("Reviews", day.count))
-                        .foregroundStyle(.green)
+                if history.isEmpty {
+                    Text("No reviews yet.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 24)
+                } else {
+                    Chart(history, id: \.date) { day in
+                        BarMark(x: .value("Day", day.date, unit: .day), y: .value("Reviews", day.count))
+                            .foregroundStyle(.green)
+                    }
+                    // Without an explicit domain a single day of data rescales the axis to
+                    // hours and stretches one bar across the whole chart.
+                    .chartXScale(domain: thirtyDaysAgo...Calendar.current.startOfDay(for: Date()).addingTimeInterval(86_400))
+                    .chartYAxis { AxisMarks(position: .trailing) }
+                    .frame(height: 180)
                 }
-                .frame(height: 180)
             }
 
             Section("Due, next 30 days") {
-                Chart(forecast, id: \.date) { day in
-                    BarMark(x: .value("Day", day.date, unit: .day), y: .value("Cards", day.count))
-                        .foregroundStyle(.blue)
+                if forecast.isEmpty {
+                    Text("Nothing scheduled in the next 30 days.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 24)
+                } else {
+                    Chart(forecast, id: \.date) { day in
+                        BarMark(x: .value("Day", day.date, unit: .day), y: .value("Cards", day.count))
+                            .foregroundStyle(.blue)
+                    }
+                    .chartXScale(domain: Calendar.current.startOfDay(for: Date())...thirtyDaysAhead)
+                    .chartYAxis { AxisMarks(position: .trailing) }
+                    .frame(height: 180)
                 }
-                .frame(height: 180)
             }
         }
         .navigationTitle("Statistics")

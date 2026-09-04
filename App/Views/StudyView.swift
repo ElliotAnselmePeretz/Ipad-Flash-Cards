@@ -2,30 +2,48 @@ import SwiftUI
 import SwiftData
 import FlashcardsCore
 
-/// The study screen: question on top, a Pencil canvas to write your answer, then the
-/// real answer plus the four Anki grade buttons.
+/// Studying is now purely recall: look at the question, decide, reveal, and say how it
+/// went. There is no writing here — writing happens when you make the card. Removing the
+/// answer canvas makes a review a few seconds instead of a minute.
 struct StudyView: View {
     let deck: StoredDeck
 
     @Environment(\.modelContext) private var context
+    @Environment(\.colorScheme) private var scheme
     @State private var session: StudySession?
     @State private var isEditingCards = false
+    @State private var flipped = false
 
     var body: some View {
-        Group {
-            if let session {
-                if session.stage == .finished {
-                    finishedView(session)
-                } else if let card = session.currentCard {
-                    studyingView(session: session, card: card)
+        ZStack {
+            Theme.page(scheme).ignoresSafeArea()
+
+            Group {
+                if let session {
+                    if session.stage == .finished {
+                        finishedView(session)
+                            .transition(.scale(scale: 0.92).combined(with: .opacity))
+                    } else if let card = session.currentCard {
+                        studying(session: session, card: card)
+                    }
+                } else {
+                    ProgressView()
                 }
-            } else {
-                ProgressView()
             }
         }
         .navigationTitle(deck.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Undo", systemImage: "arrow.uturn.backward") {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        flipped = true
+                        session?.undoLastGrade()
+                    }
+                }
+                .disabled(!(session?.canUndo ?? false))
+                .accessibilityIdentifier("study.undo")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Cards", systemImage: "square.and.pencil") { isEditingCards = true }
             }
@@ -35,13 +53,7 @@ struct StudyView: View {
                 }
             }
             if let session, session.stage != .finished {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 14) {
-                        CountPill(value: session.counts.new, color: .blue, label: "new")
-                        CountPill(value: session.counts.learning, color: .orange, label: "learning")
-                        CountPill(value: session.counts.review, color: .green, label: "due")
-                    }
-                }
+                ToolbarItem(placement: .principal) { counts(session) }
             }
         }
         .sheet(isPresented: $isEditingCards, onDismiss: { session?.rebuild() }) {
@@ -54,162 +66,201 @@ struct StudyView: View {
         }
     }
 
-    // MARK: - Studying
+    private func counts(_ session: StudySession) -> some View {
+        HStack(spacing: 14) {
+            CountPill(value: session.counts.new, color: Theme.accent(scheme), label: "new")
+            CountPill(value: session.counts.learning, color: Theme.medium(scheme), label: "learning")
+            CountPill(value: session.counts.review, color: Theme.easy(scheme), label: "due")
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: session.counts.total)
+    }
 
-    private func studyingView(session: StudySession, card: StoredCard) -> some View {
-        VStack(spacing: 0) {
-            questionPane(card)
-                .frame(maxHeight: .infinity)
+    // MARK: - The card
 
-            Divider()
+    private func studying(session: StudySession, card: StoredCard) -> some View {
+        VStack(spacing: 22) {
+            Spacer(minLength: 8)
+
+            cardFace(session: session, card: card)
+                .frame(maxWidth: 720)
+                .padding(.horizontal, 24)
+                // A real flip: the card turns over to show its other side.
+                .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+                .animation(.spring(response: 0.5, dampingFraction: 0.78), value: flipped)
+
+            Spacer(minLength: 8)
 
             if session.stage == .question {
-                answerCanvas(session: session)
-                    .frame(maxHeight: .infinity)
                 Button {
-                    withAnimation(.snappy) { session.revealAnswer() }
+                    reveal(session)
                 } label: {
-                    Text("Show answer").frame(maxWidth: .infinity)
+                    Text("Show answer")
+                        .font(Theme.label(18))
+                        .frame(maxWidth: 420)
+                        .padding(.vertical, 16)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding()
+                .buttonStyle(SpringyButtonStyle(tint: Theme.accent(scheme)))
+                .padding(.bottom, 26)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
-                answerComparison(session: session, card: card)
-                    .frame(maxHeight: .infinity)
-                gradeButtons(session: session, card: card)
-                    .padding()
+                grading(session: session, card: card)
+                    .padding(.bottom, 26)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        // A fresh canvas per card, otherwise ink bleeds between cards.
         .id(card.id)
     }
 
-    private func questionPane(_ card: StoredCard) -> some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if !card.frontText.isEmpty {
-                    Text(card.frontText)
-                        .font(.system(.largeTitle, design: .serif))
-                        .multilineTextAlignment(.center)
-                }
-                if card.frontDrawing != nil {
-                    DrawingThumbnail(data: card.frontDrawing, height: 200)
-                }
+    private func cardFace(session: StudySession, card: StoredCard) -> some View {
+        WarmCard(padding: 30) {
+            VStack(spacing: 16) {
+                Text(session.stage == .question ? "QUESTION" : "ANSWER")
+                    .font(Theme.label(11))
+                    .tracking(1.4)
+                    .foregroundStyle(Theme.softInk(scheme))
+
+                side(session.stage == .question ? .front : .back, of: card)
+                    .frame(maxWidth: .infinity, minHeight: 260)
             }
-            .frame(maxWidth: .infinity)
-            .padding(28)
+            // Counter-rotate the contents so text isn't mirrored mid-flip.
+            .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
         }
     }
 
-    private func answerCanvas(session: StudySession) -> some View {
-        ZStack(alignment: .topLeading) {
-            RuledPaper()
-            DrawingCanvas(
-                data: Binding(
-                    get: { session.attemptDrawing },
-                    set: { session.attemptDrawing = $0 }
-                ),
-                showsToolPicker: true
-            )
-            Text("Write your answer")
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-                .padding(12)
-                .allowsHitTesting(false)
-                .opacity(session.attemptDrawing == nil ? 1 : 0)
+    @ViewBuilder
+    private func side(_ which: CardFace, of card: StoredCard) -> some View {
+        let text = which == .front ? card.frontText : card.backText
+        let ink = which == .front ? card.frontDrawing : card.backDrawing
+
+        VStack(spacing: 14) {
+            // Typed text only ever comes from an import; handwritten cards have none.
+            if !text.isEmpty {
+                Text(text)
+                    .font(Theme.title(30))
+                    .foregroundStyle(Theme.ink(scheme))
+                    .multilineTextAlignment(.center)
+            }
+            if ink != nil {
+                DrawingThumbnail(data: ink, height: 240)
+            }
+            if text.isEmpty && ink == nil {
+                Text("This side is empty")
+                    .font(Theme.body())
+                    .foregroundStyle(Theme.softInk(scheme))
+            }
         }
     }
 
-    private func answerComparison(session: StudySession, card: StoredCard) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("YOUR ANSWER").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                DrawingThumbnail(data: session.attemptDrawing, height: 180)
-                    .frame(maxWidth: .infinity)
-            }
-            .padding()
+    private enum CardFace { case front, back }
 
-            Divider()
+    // MARK: - Grading
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("CORRECT").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                ScrollView {
-                    VStack(spacing: 10) {
-                        if !card.backText.isEmpty {
-                            Text(card.backText)
-                                .font(.system(.title2, design: .serif))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        if card.backDrawing != nil {
-                            DrawingThumbnail(data: card.backDrawing, height: 180)
-                        }
-                    }
-                }
-            }
-            .padding()
-        }
-    }
-
-    private func gradeButtons(session: StudySession, card: StoredCard) -> some View {
+    private func grading(session: StudySession, card: StoredCard) -> some View {
         let scheduler = SM2Scheduler(config: .default)
-        return HStack(spacing: 10) {
-            ForEach(ReviewGrade.allCases, id: \.self) { grade in
-                let preview = scheduler.review(card.scheduling, grade: grade, now: Date())
+        return HStack(spacing: 12) {
+            ForEach(Answer.allCases) { answer in
+                let preview = scheduler.review(card.scheduling, grade: answer.grade, now: Date())
                 Button {
-                    withAnimation(.snappy) { session.grade(grade) }
+                    grade(session, answer)
                 } label: {
-                    VStack(spacing: 3) {
-                        Text(title(for: grade)).font(.body.weight(.semibold))
-                        // Showing the next interval is what makes the spacing legible.
+                    VStack(spacing: 4) {
+                        Text(answer.title).font(Theme.label(17))
                         Text(intervalLabel(from: preview.dueDate))
-                            .font(.caption2.monospacedDigit())
-                            .opacity(0.75)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .opacity(0.85)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 15)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(tint(for: grade))
-                .keyboardShortcut(KeyEquivalent(Character("\(grade.rawValue + 1)")), modifiers: [])
+                .buttonStyle(SpringyButtonStyle(tint: answer.color(scheme)))
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(title(for: grade))
+                .accessibilityLabel(answer.title)
                 .accessibilityValue(intervalLabel(from: preview.dueDate))
-                .accessibilityIdentifier("grade.\(grade.rawValue)")
+                .accessibilityIdentifier("grade.\(answer.rawValue)")
             }
+        }
+        .frame(maxWidth: 640)
+        .padding(.horizontal, 24)
+    }
+
+    /// The three answers the learner sees, and how they map onto the scheduler's grades.
+    private enum Answer: String, CaseIterable, Identifiable {
+        case hard, medium, easy
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .hard: "Hard"
+            case .medium: "Medium"
+            case .easy: "Easy"
+            }
+        }
+
+        /// `Hard` maps to the scheduler's failure grade. SM-2 needs a "bring this back
+        /// soon" signal, and with only three buttons this is the one that means it.
+        var grade: ReviewGrade {
+            switch self {
+            case .hard: .again
+            case .medium: .good
+            case .easy: .easy
+            }
+        }
+
+        func color(_ scheme: ColorScheme) -> Color {
+            switch self {
+            case .hard: Theme.hard(scheme)
+            case .medium: Theme.medium(scheme)
+            case .easy: Theme.easy(scheme)
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func reveal(_ session: StudySession) {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
+            flipped.toggle()
+            session.revealAnswer()
+        }
+    }
+
+    private func grade(_ session: StudySession, _ answer: Answer) {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+            flipped = false
+            session.grade(answer.grade)
         }
     }
 
     private func finishedView(_ session: StudySession) -> some View {
-        ContentUnavailableView {
-            Label("All caught up", systemImage: "checkmark.circle")
-        } description: {
+        VStack(spacing: 18) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 66))
+                .foregroundStyle(Theme.easy(scheme))
+                .symbolEffect(.bounce, value: session.completedCount)
+
+            Text("All caught up")
+                .font(Theme.display(28))
+                .foregroundStyle(Theme.ink(scheme))
+
             Text(session.completedCount == 0
                  ? "Nothing is due in this deck right now."
                  : "^[\(session.completedCount) card](inflect: true) reviewed.")
-        } actions: {
-            Button("Check again") { session.rebuild() }
-        }
-    }
+                .font(Theme.body())
+                .foregroundStyle(Theme.softInk(scheme))
 
-    // MARK: - Formatting
-
-    private func title(for grade: ReviewGrade) -> String {
-        switch grade {
-        case .again: "Again"
-        case .hard: "Hard"
-        case .good: "Good"
-        case .easy: "Easy"
+            HStack(spacing: 12) {
+                if session.canUndo {
+                    Button("Undo last answer") { session.undoLastGrade() }
+                        .buttonStyle(QuietButtonStyle())
+                        .accessibilityIdentifier("study.undoFinished")
+                }
+                Button("Check again") { withAnimation { session.rebuild() } }
+                    .buttonStyle(QuietButtonStyle())
+            }
+            .padding(.top, 6)
         }
-    }
-
-    private func tint(for grade: ReviewGrade) -> Color {
-        switch grade {
-        case .again: .red
-        case .hard: .orange
-        case .good: .green
-        case .easy: .blue
-        }
+        .padding(40)
     }
 
     private func intervalLabel(from due: Date) -> String {
@@ -220,22 +271,5 @@ struct StudyView: View {
         if days < 30 { return "\(Int(days.rounded()))d" }
         if days < 365 { return "\(Int((days / 30).rounded()))mo" }
         return String(format: "%.1fy", days / 365)
-    }
-}
-
-/// Faint ruled lines, so handwriting has something to sit on.
-struct RuledPaper: View {
-    var spacing: CGFloat = 44
-
-    var body: some View {
-        Canvas { context, size in
-            var y = spacing
-            while y < size.height {
-                let line = Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: size.width, y: y)) }
-                context.stroke(line, with: .color(.secondary.opacity(0.12)), lineWidth: 1)
-                y += spacing
-            }
-        }
-        .allowsHitTesting(false)
     }
 }
