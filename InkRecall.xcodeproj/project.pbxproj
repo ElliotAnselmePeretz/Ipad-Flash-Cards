@@ -15,11 +15,6 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		477F88E7C9137CE5EBE72320 /* UITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = UITests;
-			sourceTree = "<group>";
-		};
 		AB8D408CB1881C666AAC0831 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = App;
@@ -33,13 +28,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				587D838785E2FB583D0CD372 /* FlashcardsCore in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		ACDA51663FA0FAAD6BE54642 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,23 +121,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		625F0CFC1C09F7FCB5D09A21 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		84D11EC50F665C452F4F48A4 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		B86AE64DEDDC7C57FC0793BF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -234,24 +208,6 @@
 			};
 			name = Debug;
 		};
-		5AD250C405720E5A61537AE0 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.elliotanselme.InkRecallUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 2;
-				TEST_TARGET_NAME = InkRecall;
-			};
-			name = Release;
-		};
 		A25F4C83776EC0189476E4C1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -277,24 +233,6 @@
 			};
 			name = Release;
 		};
-		EF16844EF6A271869C12E7E8 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.elliotanselme.InkRecallUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 2;
-				TEST_TARGET_NAME = InkRecall;
-			};
-			name = Debug;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -303,15 +241,6 @@
 			buildConfigurations = (
 				0CED1367D0DCAADC7431BBC9 /* Debug */,
 				A25F4C83776EC0189476E4C1 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		3B9F970D3BD08EC556419177 /* Build configuration list for PBXNativeTarget "InkRecallUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				EF16844EF6A271869C12E7E8 /* Debug */,
-				5AD250C405720E5A61537AE0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

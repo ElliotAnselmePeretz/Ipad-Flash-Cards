@@ -87,8 +87,13 @@ struct DeckListView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    summaryHeader
-                        .padding(.bottom, 4)
+                    NavigationLink {
+                        OverallProgressView(profile: profile)
+                    } label: {
+                        summaryHeader
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 4)
 
                     ForEach(Array(decks.enumerated()), id: \.element.id) { index, deck in
                         NavigationLink {
@@ -121,6 +126,14 @@ struct DeckListView: View {
                 }
             }
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        OverallProgressView(profile: profile)
+                    } label: {
+                        Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+                    }
+                    .accessibilityIdentifier("decks.progress")
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
                         Picker("Appearance", selection: $appearance) {
