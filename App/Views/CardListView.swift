@@ -15,7 +15,7 @@ struct CardListView: View {
     var body: some View {
         List {
             ForEach(cards) { card in
-                Button { editingCard = card } label: {
+                NavigationLink(value: card) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(card.frontText.isEmpty ? "(handwritten)" : card.frontText)
@@ -29,7 +29,6 @@ struct CardListView: View {
                         }
                     }
                 }
-                .buttonStyle(.plain)
             }
             .onDelete { indexSet in
                 for index in indexSet { cards[index].deletedAt = Date() }
@@ -50,12 +49,16 @@ struct CardListView: View {
                 Button("Add card", systemImage: "plus") {
                     let card = StoredCard(deck: deck)
                     context.insert(card)
+                    try? context.save()
                     editingCard = card
                 }
             }
         }
-        .sheet(item: $editingCard) { card in
-            NavigationStack { CardEditorView(card: card) }
+        .navigationDestination(item: $editingCard) { card in
+            CardEditorView(card: card)
+        }
+        .navigationDestination(for: StoredCard.self) { card in
+            CardEditorView(card: card)
         }
     }
 
@@ -77,7 +80,7 @@ struct CardEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var side: Side = .front
 
-    enum Side: String, CaseIterable { case front = "Front", back = "Back" }
+    enum Side: String, CaseIterable { case front = "Front", back = "Answer" }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,6 +88,7 @@ struct CardEditorView: View {
                 ForEach(Side.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("sidePicker")
             .padding()
 
             TextField(side == .front ? "Question (optional)" : "Answer (optional)",
@@ -109,9 +113,6 @@ struct CardEditorView: View {
         .navigationTitle("Edit card")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Cancel") { dismiss() }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") {
                     card.modifiedAt = Date()

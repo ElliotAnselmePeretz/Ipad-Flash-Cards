@@ -39,12 +39,15 @@ final class StudySession {
 
     /// Rebuilds today's queue from the store.
     func rebuild(now: Date = Date()) {
+        // Relationship traversal is deliberately kept OUT of the predicate: CoreData
+        // cannot translate a chained optional keypath like `card?.deck?.id` into SQL and
+        // throws at fetch time. Filter on stored columns, then narrow in Swift.
         let deckID = deck.id
         let descriptor = FetchDescriptor<StoredCard>(
-            predicate: #Predicate { $0.deck?.id == deckID && $0.deletedAt == nil },
+            predicate: #Predicate { $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.dueDate)]
         )
-        let stored = (try? context.fetch(descriptor)) ?? []
+        let stored = ((try? context.fetch(descriptor)) ?? []).filter { $0.deck?.id == deckID }
         let byID = Dictionary(uniqueKeysWithValues: stored.map { ($0.id, $0) })
 
         let builder = ReviewQueue(
@@ -142,12 +145,14 @@ final class StudySession {
     }
 
     private func logsToday(now: Date) -> [StoredReviewLog] {
+        // Same constraint as `rebuild`: date filtering happens in the query, deck
+        // matching happens in Swift. One day of reviews is a small set either way.
         let start = dayStart(now: now)
         let deckID = deck.id
         let descriptor = FetchDescriptor<StoredReviewLog>(
-            predicate: #Predicate { $0.reviewedAt >= start && $0.card?.deck?.id == deckID }
+            predicate: #Predicate { $0.reviewedAt >= start }
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return ((try? context.fetch(descriptor)) ?? []).filter { $0.card?.deck?.id == deckID }
     }
 
     private func newCardsStudiedToday(now: Date) -> Int {

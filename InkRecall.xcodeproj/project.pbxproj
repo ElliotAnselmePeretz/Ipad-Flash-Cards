@@ -11,24 +11,29 @@
 
 /* Begin PBXFileReference section */
 		DF56A81F6C35A89FD50C8B5E /* InkRecall.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InkRecall.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0EB8683D1A90BD7CC1A0207C /* InkRecallUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InkRecallUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AB8D408CB1881C666AAC0831 /* App */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = App; sourceTree = "<group>"; };
+		477F88E7C9137CE5EBE72320 /* UITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = UITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		4FB0DD115CECD15543F09919 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
 				587D838785E2FB583D0CD372 /* FlashcardsCore in Frameworks */,
 			); runOnlyForDeploymentPostprocessing = 0; };
+		ACDA51663FA0FAAD6BE54642 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		71D2E56247FE75C3DCE9B609 = {isa = PBXGroup; children = (
+				477F88E7C9137CE5EBE72320 /* UITests */,
 				AB8D408CB1881C666AAC0831 /* App */,
 				30772F61AC9BDC8631745269 /* Products */,
 			); sourceTree = "<group>"; };
 		30772F61AC9BDC8631745269 /* Products */ = {isa = PBXGroup; children = (
+				0EB8683D1A90BD7CC1A0207C /* InkRecallUITests.xctest */,
 				DF56A81F6C35A89FD50C8B5E /* InkRecall.app */,
 			); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
@@ -55,7 +60,27 @@
 			productReference = DF56A81F6C35A89FD50C8B5E /* InkRecall.app */;
 			productType = "com.apple.product-type.application";
 		};
+		FF2971AF8C57FB81797E33C1 /* InkRecallUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B9F970D3BD08EC556419177;
+			buildPhases = ( 84D11EC50F665C452F4F48A4, ACDA51663FA0FAAD6BE54642, 625F0CFC1C09F7FCB5D09A21, );
+			buildRules = ();
+			dependencies = ( 175E49A6853E0D7264B6C73C /* PBXTargetDependency */, );
+			fileSystemSynchronizedGroups = ( 477F88E7C9137CE5EBE72320 /* UITests */, );
+			name = InkRecallUITests;
+			productName = InkRecallUITests;
+			productReference = 0EB8683D1A90BD7CC1A0207C /* InkRecallUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		175E49A6853E0D7264B6C73C /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 42AEFBAE01D2DFD981F7DA7D /* InkRecall */; targetProxy = 199185866677E91A02F4F171 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		199185866677E91A02F4F171 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 4DC844ABCCFC0D132D087C1C /* Project object */; proxyType = 1; remoteGlobalIDString = 42AEFBAE01D2DFD981F7DA7D; remoteInfo = InkRecall; };
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		4DC844ABCCFC0D132D087C1C /* Project object */ = {
@@ -83,16 +108,19 @@
 			projectRoot = "";
 			targets = (
 				42AEFBAE01D2DFD981F7DA7D /* InkRecall */,
+				FF2971AF8C57FB81797E33C1 /* InkRecallUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		23480C3245676D8308AF8592 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		625F0CFC1C09F7FCB5D09A21 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B86AE64DEDDC7C57FC0793BF = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		84D11EC50F665C452F4F48A4 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -184,11 +212,48 @@
 			};
 			name = Release;
 		};
+		EF16844EF6A271869C12E7E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elliotanselme.InkRecallUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 2;
+				TEST_TARGET_NAME = InkRecall;
+			};
+			name = Debug;
+		};
+		5AD250C405720E5A61537AE0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elliotanselme.InkRecallUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 2;
+				TEST_TARGET_NAME = InkRecall;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
 		DEA5253927A3E232646F5A23 = {isa = XCConfigurationList; buildConfigurations = ( 444DA0D52182062717114049 /* Debug */, 01FE200FDC5D2869057F5A60 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		122EA1CC6942390937726F6A = {isa = XCConfigurationList; buildConfigurations = ( 0CED1367D0DCAADC7431BBC9 /* Debug */, A25F4C83776EC0189476E4C1 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		3B9F970D3BD08EC556419177 = {isa = XCConfigurationList; buildConfigurations = ( EF16844EF6A271869C12E7E8 /* Debug */, 5AD250C405720E5A61537AE0 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */

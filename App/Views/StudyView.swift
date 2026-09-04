@@ -172,6 +172,10 @@ struct StudyView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(tint(for: grade))
                 .keyboardShortcut(KeyEquivalent(Character("\(grade.rawValue + 1)")), modifiers: [])
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(title(for: grade))
+                .accessibilityValue(intervalLabel(from: preview.dueDate))
+                .accessibilityIdentifier("grade.\(grade.rawValue)")
             }
         }
     }
@@ -210,8 +214,8 @@ struct StudyView: View {
 
     private func intervalLabel(from due: Date) -> String {
         let seconds = max(0, due.timeIntervalSinceNow)
-        if seconds < 3_600 { return "\(max(1, Int(seconds / 60)))m" }
-        if seconds < 86_400 { return "\(Int(seconds / 3_600))h" }
+        if seconds < 3_600 { return "\(max(1, Int((seconds / 60).rounded())))m" }
+        if seconds < 86_400 { return "\(max(1, Int((seconds / 3_600).rounded())))h" }
         let days = seconds / 86_400
         if days < 30 { return "\(Int(days.rounded()))d" }
         if days < 365 { return "\(Int((days / 30).rounded()))mo" }

@@ -8,7 +8,10 @@ struct FlashcardsApp: App {
     /// (UUID keys, modifiedAt, soft deletes, every record scoped by profile).
     let container: ModelContainer = {
         let schema = Schema([StoredProfile.self, StoredDeck.self, StoredCard.self, StoredReviewLog.self])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        // UI tests pass -ui-testing-reset so each test starts from an empty store
+        // instead of inheriting whatever the previous test left behind.
+        let inMemory = ProcessInfo.processInfo.arguments.contains("-ui-testing-reset")
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         do {
             return try ModelContainer(for: schema, configurations: [config])
         } catch {
