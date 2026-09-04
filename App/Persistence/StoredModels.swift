@@ -88,6 +88,12 @@ final class StoredCard {
     var phaseStep: Int = 0
     var intervalDays: Double = 0
     var easeFactor: Double = 2.5
+    /// FSRS memory model. Nil until the card has been answered once.
+    var stability: Double?
+    var difficulty: Double?
+    /// Leeches are cards you keep forgetting; suspended ones leave the queue entirely.
+    var isSuspended: Bool = false
+    var isLeech: Bool = false
     var repetitions: Int = 0
     var lapses: Int = 0
     var dueDate: Date = Date()
@@ -112,6 +118,11 @@ final class StoredCard {
         self.dueDate = Date()
     }
 
+    private var memoryState: MemoryState? {
+        guard let stability, let difficulty else { return nil }
+        return MemoryState(stability: stability, difficulty: difficulty)
+    }
+
     var scheduling: SchedulingState {
         get {
             SchedulingState(
@@ -121,7 +132,10 @@ final class StoredCard {
                 repetitions: repetitions,
                 lapses: lapses,
                 dueDate: dueDate,
-                lastReviewedAt: lastReviewedAt
+                lastReviewedAt: lastReviewedAt,
+                memory: memoryState,
+                isSuspended: isSuspended,
+                isLeech: isLeech
             )
         }
         set {
@@ -134,6 +148,10 @@ final class StoredCard {
             lapses = newValue.lapses
             dueDate = newValue.dueDate
             lastReviewedAt = newValue.lastReviewedAt
+            stability = newValue.memory?.stability
+            difficulty = newValue.memory?.difficulty
+            isSuspended = newValue.isSuspended
+            isLeech = newValue.isLeech
             modifiedAt = Date()
         }
     }

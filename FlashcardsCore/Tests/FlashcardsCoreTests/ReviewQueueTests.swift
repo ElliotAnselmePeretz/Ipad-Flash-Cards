@@ -31,12 +31,23 @@ final class ReviewQueueTests: XCTestCase {
         XCTAssertEqual(queue[2].scheduling.phase, .new)
     }
 
-    func testCardsDueInTheFutureAreExcluded() {
+    func testReviewCardsDueInTheFutureAreExcluded() {
         let deck = makeDeck()
-        let cards = [
-            card(in: deck, phase: .review, due: t0.addingTimeInterval(86_400)),
-            card(in: deck, phase: .learning(step: 0), due: t0.addingTimeInterval(600)),
-        ]
+        let cards = [card(in: deck, phase: .review, due: t0.addingTimeInterval(86_400))]
+        XCTAssertTrue(ReviewQueue(deck: deck).build(from: cards, now: t0).isEmpty)
+    }
+
+    /// A learning card a few minutes out is pulled forward rather than ending the session,
+    /// which is what Anki's learn-ahead limit does. Anything past the limit still waits.
+    func testLearningCardWithinTheLearnAheadLimitIsIncluded() {
+        let deck = makeDeck()
+        let cards = [card(in: deck, phase: .learning(step: 0), due: t0.addingTimeInterval(600))]
+        XCTAssertEqual(ReviewQueue(deck: deck).build(from: cards, now: t0).count, 1)
+    }
+
+    func testLearningCardBeyondTheLearnAheadLimitIsExcluded() {
+        let deck = makeDeck()
+        let cards = [card(in: deck, phase: .learning(step: 0), due: t0.addingTimeInterval(5_400))]
         XCTAssertTrue(ReviewQueue(deck: deck).build(from: cards, now: t0).isEmpty)
     }
 

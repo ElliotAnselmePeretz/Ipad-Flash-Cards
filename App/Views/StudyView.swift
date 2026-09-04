@@ -74,7 +74,7 @@ struct StudyView: View {
         }
         .task {
             if session == nil {
-                session = StudySession(deck: deck, context: context, config: .default)
+                session = StudySession(deck: deck, context: context, settings: .default)
             }
         }
     }
@@ -169,10 +169,10 @@ struct StudyView: View {
     // MARK: - Grading
 
     private func grading(session: StudySession, card: StoredCard) -> some View {
-        let scheduler = SM2Scheduler(config: .default)
+        let scheduler = FSRSCardScheduler(settings: .default)
         return HStack(spacing: 12) {
             ForEach(Answer.allCases) { answer in
-                let preview = scheduler.review(card.scheduling, grade: answer.grade, now: Date())
+                let preview = scheduler.review(card.scheduling, grade: answer.grade, now: Date()).state
                 Button {
                     grade(session, answer)
                 } label: {

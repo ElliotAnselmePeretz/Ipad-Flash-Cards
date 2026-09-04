@@ -5,7 +5,7 @@ import FlashcardsCore
 
 /// Drives one study run: holds the queue, applies grades, writes review logs.
 ///
-/// All scheduling decisions are delegated to `SM2Scheduler` in the core package —
+/// All scheduling decisions are delegated to `FSRSCardScheduler` in the core package —
 /// this type only deals with persistence and presentation state.
 @Observable
 final class StudySession {
@@ -35,17 +35,21 @@ final class StudySession {
 
     var canUndo: Bool { lastStep != nil }
 
+    /// Set when a review pushes a card past the leech threshold, so the UI can say so.
+    private(set) var leechCount = 0
+    private(set) var lastLeechName: String?
+
     private let deck: StoredDeck
     private let context: ModelContext
-    private let scheduler: SM2Scheduler
+    private let scheduler: FSRSCardScheduler
     private var shownAt = Date()
 
     var currentCard: StoredCard? { queue.first }
 
-    init(deck: StoredDeck, context: ModelContext, config: SchedulerConfig = .default) {
+    init(deck: StoredDeck, context: ModelContext, settings: RetentionSettings = .default) {
         self.deck = deck
         self.context = context
-        self.scheduler = SM2Scheduler(config: config)
+        self.scheduler = FSRSCardScheduler(settings: settings)
         rebuild()
     }
 
@@ -85,8 +89,15 @@ final class StudySession {
         guard let card = currentCard else { return }
 
         let before = card.scheduling
-        let after = scheduler.review(before, grade: grade, now: now)
+        let outcome = scheduler.review(before, grade: grade, now: now)
+        let after = outcome.state
         card.scheduling = after
+        if outcome.becameLeech {
+            card.isLeech = true
+            lastLeechName = deck.name
+            leechCount += 1
+        }
+        if outcome.shouldSuspend { card.isSuspended = true }
 
         let log = StoredReviewLog(
             card: card,

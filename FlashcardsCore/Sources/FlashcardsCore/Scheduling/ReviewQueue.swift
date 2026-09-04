@@ -22,11 +22,15 @@ public struct ReviewQueue: Sendable {
     public let deck: Deck
     public let newCardsStudiedToday: Int
     public let reviewsCompletedToday: Int
+    /// Learning cards may be shown this early when nothing else is waiting.
+    public let learnAheadLimit: TimeInterval
 
-    public init(deck: Deck, newCardsStudiedToday: Int = 0, reviewsCompletedToday: Int = 0) {
+    public init(deck: Deck, newCardsStudiedToday: Int = 0, reviewsCompletedToday: Int = 0,
+                learnAheadLimit: TimeInterval = 1_200) {
         self.deck = deck
         self.newCardsStudiedToday = newCardsStudiedToday
         self.reviewsCompletedToday = reviewsCompletedToday
+        self.learnAheadLimit = learnAheadLimit
     }
 
     /// Cards to study now, in the order they should appear.
@@ -34,10 +38,25 @@ public struct ReviewQueue: Sendable {
     /// Learning cards come first because their intervals are measured in minutes and go
     /// stale fastest; then reviews, oldest-due first; then new cards, up to the daily cap.
     public func build(from cards: [Card], now: Date = Date()) -> [Card] {
-        let live = cards.filter { !$0.isDeleted && $0.profileID == deck.profileID && $0.deckID == deck.id }
+        // Suspended leeches leave the rotation entirely: time spent failing them again is
+        // time not spent on cards you can actually learn.
+        let live = cards.filter {
+            !$0.isDeleted && !$0.scheduling.isSuspended
+                && $0.profileID == deck.profileID && $0.deckID == deck.id
+        }
 
-        let learning = live
-            .filter { isLearning($0) && $0.scheduling.isDue(at: now) }
+        let dueLearning = live.filter { isLearning($0) && $0.scheduling.isDue(at: now) }
+
+        // If nothing is due at all, pull forward a learning card that is nearly due rather
+        // than ending the session over a few minutes.
+        let aheadCutoff = now.addingTimeInterval(learnAheadLimit)
+        let nothingElseDue = dueLearning.isEmpty
+            && !live.contains { $0.scheduling.phase == .review && $0.scheduling.isDue(at: now) }
+        let learningPool = nothingElseDue
+            ? live.filter { isLearning($0) && $0.scheduling.dueDate <= aheadCutoff }
+            : dueLearning
+
+        let learning = learningPool
             .sorted { $0.scheduling.dueDate < $1.scheduling.dueDate }
 
         let reviewBudget = max(0, deck.maximumReviewsPerDay - reviewsCompletedToday)
