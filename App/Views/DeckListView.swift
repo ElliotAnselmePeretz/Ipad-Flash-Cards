@@ -11,6 +11,7 @@ struct DeckListView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var newDeckName = ""
     @State private var isAddingDeck = false
+    @State private var writingInto: StoredDeck?
 
     private var decks: [StoredDeck] {
         profile.decks.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
@@ -78,7 +79,7 @@ struct DeckListView: View {
                 }
             }
             // A faint halo when something is actually waiting, and none when it is not.
-            .softGlow(Theme.accent(scheme), active: dueNow > 0, maxOpacity: 0.20)
+            .softGlow(Theme.glow(scheme), active: dueNow > 0, maxOpacity: 0.6)
             .animation(.easeInOut(duration: 0.5), value: dueNow)
         }
     }
@@ -96,12 +97,32 @@ struct DeckListView: View {
                     .padding(.bottom, 4)
 
                     ForEach(Array(decks.enumerated()), id: \.element.id) { index, deck in
-                        NavigationLink {
-                            StudyView(deck: deck)
-                        } label: {
-                            WarmCard(padding: 18) { DeckRow(deck: deck) }
+                        WarmCard(padding: 18) {
+                            HStack(spacing: 14) {
+                                NavigationLink {
+                                    StudyView(deck: deck)
+                                } label: {
+                                    DeckRow(deck: deck)
+                                }
+                                .buttonStyle(.plain)
+
+                                // A visible way to add cards without entering the deck.
+                                Button {
+                                    writingInto = deck
+                                } label: {
+                                    Image(systemName: "pencil.and.scribble")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .frame(width: 46, height: 46)
+                                        .background(
+                                            Circle().fill(Theme.accent(scheme).opacity(0.15))
+                                        )
+                                        .foregroundStyle(Theme.accent(scheme))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Write cards in \(deck.name)")
+                                .accessibilityIdentifier("deck.write")
+                            }
                         }
-                        .buttonStyle(.plain)
                         .contextMenu {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -119,6 +140,9 @@ struct DeckListView: View {
                 .padding(20)
             }
             .background(Theme.page(scheme))
+            .navigationDestination(item: $writingInto) { deck in
+                RapidCaptureView(deck: deck)
+            }
             .navigationTitle("Decks")
             .overlay {
                 if decks.isEmpty {
@@ -234,7 +258,7 @@ private struct EmptyDecksView: View {
             Image(systemName: "pencil.and.scribble")
                 .font(.system(size: 52, weight: .light))
                 .foregroundStyle(Theme.accent(scheme))
-                .softGlow(Theme.accent(scheme), maxOpacity: 0.25)
+                .softGlow(Theme.glow(scheme), maxOpacity: 0.6)
 
             Text("Nothing here yet")
                 .font(Theme.display(24))

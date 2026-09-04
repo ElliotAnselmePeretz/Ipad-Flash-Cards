@@ -39,6 +39,14 @@ enum Theme {
                         : Color(red: 0.86, green: 0.51, blue: 0.24)
     }
 
+    /// The ambient glow. Light mode gets a soft sky blue, which reads as cool light on
+    /// warm paper rather than the paper itself glowing; dark mode uses a deeper blue so
+    /// the effect stays recognisably the same thing.
+    static func glow(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.42, green: 0.60, blue: 0.86)
+                        : Color(red: 0.53, green: 0.76, blue: 0.94)
+    }
+
     /// The three answers. Warm and distinguishable without being traffic lights.
     static func hard(_ scheme: ColorScheme) -> Color {
         scheme == .dark ? Color(red: 0.94, green: 0.55, blue: 0.50)
@@ -124,18 +132,21 @@ struct QuietButtonStyle: ButtonStyle {
 struct SoftGlow: ViewModifier {
     var color: Color
     var active: Bool = true
-    var maxOpacity: Double = 0.28
+    var maxOpacity: Double = 0.55
 
     @State private var pulse = false
 
     func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                // Inset negatively and blurred hard, so the halo actually escapes from
+                // behind an opaque card instead of being hidden by it.
+                RoundedRectangle(cornerRadius: Theme.corner + 10, style: .continuous)
                     .fill(color)
-                    .blur(radius: 26)
-                    .opacity(active ? (pulse ? maxOpacity : maxOpacity * 0.4) : 0)
-                    .scaleEffect(pulse ? 1.015 : 0.995)
+                    .padding(-14)
+                    .blur(radius: 30)
+                    .opacity(active ? (pulse ? maxOpacity : maxOpacity * 0.45) : 0)
+                    .scaleEffect(pulse ? 1.03 : 1.0)
                     .animation(.easeInOut(duration: 3).repeatForever(autoreverses: true), value: pulse)
                     .allowsHitTesting(false)
             )

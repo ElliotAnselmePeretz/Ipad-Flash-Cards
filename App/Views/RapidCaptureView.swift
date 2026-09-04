@@ -147,7 +147,7 @@ struct RapidCaptureView: View {
             }
         }
         // The glow appears only once the side has ink, so it reads as quiet encouragement.
-        .softGlow(accent, active: canAdvance, maxOpacity: 0.22)
+        .softGlow(Theme.glow(scheme), active: canAdvance, maxOpacity: 0.55)
         .animation(.easeInOut(duration: 0.45), value: canAdvance)
     }
 

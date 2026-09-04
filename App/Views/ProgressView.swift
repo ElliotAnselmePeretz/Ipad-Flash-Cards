@@ -130,7 +130,7 @@ struct OverallProgressView: View {
                 }
             }
         }
-        .softGlow(Theme.accent(scheme), active: reviewsToday > 0, maxOpacity: 0.18)
+        .softGlow(Theme.glow(scheme), active: reviewsToday > 0, maxOpacity: 0.55)
     }
 
     private var allTimeCard: some View {

@@ -21,8 +21,13 @@ struct StudyView: View {
             Group {
                 if let session {
                     if session.stage == .finished {
-                        finishedView(session)
+                        if deck.cards.filter({ $0.deletedAt == nil }).isEmpty {
+                            emptyDeckView
+                                .transition(.scale(scale: 0.94).combined(with: .opacity))
+                        } else {
+                            finishedView(session)
                             .transition(.scale(scale: 0.92).combined(with: .opacity))
+                        }
                     } else if let card = session.currentCard {
                         studying(session: session, card: card)
                     }
@@ -45,7 +50,15 @@ struct StudyView: View {
                 .accessibilityIdentifier("study.undo")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Cards", systemImage: "square.and.pencil") { isEditingCards = true }
+                NavigationLink {
+                    RapidCaptureView(deck: deck)
+                } label: {
+                    Label("Write cards", systemImage: "pencil.and.scribble")
+                }
+                .accessibilityIdentifier("study.write")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("All cards", systemImage: "square.stack") { isEditingCards = true }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink { StatsView(deck: deck) } label: {
@@ -259,6 +272,52 @@ struct StudyView: View {
                     .buttonStyle(QuietButtonStyle())
             }
             .padding(.top, 6)
+
+            NavigationLink {
+                RapidCaptureView(deck: deck)
+            } label: {
+                Label("Write more cards", systemImage: "pencil.and.scribble")
+                    .font(Theme.label(17))
+                    .frame(minWidth: 240)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(SpringyButtonStyle(tint: Theme.accent(scheme)))
+            .padding(.top, 10)
+        }
+        .padding(40)
+    }
+
+    /// Shown when a deck has no cards at all. Previously this fell through to
+    /// "All caught up", which told you nothing was due in a deck that was simply empty.
+    private var emptyDeckView: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "pencil.and.scribble")
+                .font(.system(size: 60, weight: .light))
+                .foregroundStyle(Theme.accent(scheme))
+                .softGlow(Theme.glow(scheme), maxOpacity: 0.6)
+
+            Text("This deck is empty")
+                .font(Theme.display(28))
+                .foregroundStyle(Theme.ink(scheme))
+
+            Text("Write your first card with the Pencil.")
+                .font(Theme.body())
+                .foregroundStyle(Theme.softInk(scheme))
+
+            NavigationLink {
+                RapidCaptureView(deck: deck)
+            } label: {
+                Label("Write cards", systemImage: "pencil.and.scribble")
+                    .font(Theme.label(18))
+                    .frame(minWidth: 260)
+                    .padding(.vertical, 16)
+            }
+            .buttonStyle(SpringyButtonStyle(tint: Theme.accent(scheme)))
+            .padding(.top, 8)
+            .accessibilityIdentifier("study.writeEmpty")
+
+            Button("Import from a file") { isEditingCards = true }
+                .buttonStyle(QuietButtonStyle())
         }
         .padding(40)
     }
