@@ -26,6 +26,14 @@ struct FlashcardsApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(usage)
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .active: usage.appDidEnterForeground()
+                    case .background, .inactive: usage.appDidEnterBackground()
+                    @unknown default: break
+                    }
+                }
         }
         .modelContainer(container)
     }
@@ -45,7 +53,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if let profile = profiles.first {
-                DeckListView(profile: profile)
+                // Dev-only: lets the progress screen be opened directly for verification.
+                if ProcessInfo.processInfo.arguments.contains("-open-progress") {
+                    NavigationStack { OverallProgressView(profile: profile) }
+                } else {
+                    DeckListView(profile: profile)
+                }
             } else {
                 // First launch: nothing to choose, so just get out of the way.
                 ProgressView().task { createDefaultProfile() }
