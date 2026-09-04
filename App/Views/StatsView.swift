@@ -7,8 +7,15 @@ import FlashcardsCore
 struct StatsView: View {
     let deck: StoredDeck
 
+    /// Cards that still count: soft-deleted ones are excluded everywhere.
+    private var liveCards: [StoredCard] {
+        deck.cards.filter { $0.deletedAt == nil }
+    }
+
     private var logs: [StoredReviewLog] {
-        deck.cards.flatMap(\.reviewLogs).sorted { $0.reviewedAt < $1.reviewedAt }
+        // Deleting a card removes its history from the statistics too, so the review
+        // count can never disagree with the card count.
+        liveCards.flatMap(\.reviewLogs).sorted { $0.reviewedAt < $1.reviewedAt }
     }
 
     /// Reviews per day over the last 30 days.
@@ -25,7 +32,7 @@ struct StatsView: View {
     private var forecast: [(date: Date, count: Int)] {
         let calendar = Calendar.current
         let horizon = calendar.date(byAdding: .day, value: 30, to: Date()) ?? Date()
-        let due = deck.cards.filter { $0.deletedAt == nil && $0.dueDate <= horizon }
+        let due = liveCards.filter { $0.dueDate <= horizon }
         let grouped = Dictionary(grouping: due) { calendar.startOfDay(for: max($0.dueDate, Date())) }
         return grouped.map { (date: $0.key, count: $0.value.count) }.sorted { $0.date < $1.date }
     }
@@ -36,16 +43,28 @@ struct StatsView: View {
         return Double(graded.filter { $0.grade != .again }.count) / Double(graded.count)
     }
 
+    /// One summary line. The value carries its own identifier so tests can read it
+    /// without depending on how SwiftUI flattens a LabeledContent's accessibility.
+    private func statRow(_ title: String, value: String, id: String) -> some View {
+        LabeledContent {
+            Text(value).monospacedDigit().accessibilityIdentifier(id)
+        } label: {
+            Text(title)
+        }
+    }
+
     var body: some View {
         List {
             Section("Summary") {
-                LabeledContent("Cards", value: "\(deck.cards.filter { $0.deletedAt == nil }.count)")
-                LabeledContent("Reviews", value: "\(logs.count)")
-                if let retention {
-                    LabeledContent("Retention", value: retention.formatted(.percent.precision(.fractionLength(0))))
-                }
-                let mature = deck.cards.filter { $0.intervalDays >= 21 && $0.deletedAt == nil }.count
-                LabeledContent("Mature cards", value: "\(mature)")
+                statRow("Cards", value: "\(liveCards.count)", id: "stat.cards")
+                statRow("Reviews", value: "\(logs.count)", id: "stat.reviews")
+                // Always shown, so the row doesn't appear and disappear between sessions.
+                statRow("Retention",
+                        value: retention.map { $0.formatted(.percent.precision(.fractionLength(0))) } ?? "—",
+                        id: "stat.retention")
+                statRow("Mature cards",
+                        value: "\(liveCards.filter { $0.intervalDays >= 21 }.count)",
+                        id: "stat.mature")
             }
 
             Section("Reviews, last 30 days") {
