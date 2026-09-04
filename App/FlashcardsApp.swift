@@ -65,6 +65,7 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(appearance.colorScheme)
+        .task { BackupSelfTest.runIfRequested(context: context) }
     }
 
     private func createDefaultProfile() {

@@ -165,6 +165,12 @@ struct DeckListView: View {
                                 Text(option.label).tag(option)
                             }
                         }
+                        Divider()
+                        NavigationLink {
+                            BackupView(profile: profile)
+                        } label: {
+                            Label("Backup", systemImage: "externaldrive")
+                        }
                     } label: {
                         Label("Appearance", systemImage: "circle.lefthalf.filled")
                     }
