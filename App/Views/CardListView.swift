@@ -46,6 +46,13 @@ struct CardListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { Button("Done") { dismiss() } }
             ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    ImportView(deck: deck)
+                } label: {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Add card", systemImage: "plus") {
                     let card = StoredCard(deck: deck)
                     context.insert(card)
