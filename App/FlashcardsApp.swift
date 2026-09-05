@@ -6,7 +6,6 @@ struct FlashcardsApp: App {
     /// Foreground time is only measurable while the app is running, so this starts
     /// counting from first launch — there is no history to backfill.
     @State private var usage = UsageTracker()
-    @Environment(\.scenePhase) private var scenePhase
     /// Local-only for now. Switching to `cloudKitDatabase: .automatic` is the one-line
     /// change that turns this into a synced app — the models are already shaped for it
     /// (UUID keys, modifiedAt, soft deletes, every record scoped by profile).
@@ -27,13 +26,6 @@ struct FlashcardsApp: App {
         WindowGroup {
             RootView()
                 .environment(usage)
-                .onChange(of: scenePhase) { _, phase in
-                    switch phase {
-                    case .active: usage.appDidEnterForeground()
-                    case .background, .inactive: usage.appDidEnterBackground()
-                    @unknown default: break
-                    }
-                }
         }
         .modelContainer(container)
     }
@@ -49,6 +41,8 @@ struct RootView: View {
     @Query(sort: \StoredProfile.createdAt) private var profiles: [StoredProfile]
     @Environment(\.modelContext) private var context
     @AppStorage("appearance") private var appearance = Appearance.system
+    @Environment(UsageTracker.self) private var usage
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -66,6 +60,23 @@ struct RootView: View {
         }
         .preferredColorScheme(appearance.colorScheme)
         .task { BackupSelfTest.runIfRequested(context: context) }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                usage.appDidEnterForeground()
+            case .background, .inactive:
+                usage.appDidEnterBackground()
+                backupIfDue()
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    /// Leaving the app is the natural moment to save: the day's work is done.
+    private func backupIfDue() {
+        guard let profile = profiles.first else { return }
+        AutoBackup.runIfDue(profile: profile, context: context)
     }
 
     private func createDefaultProfile() {

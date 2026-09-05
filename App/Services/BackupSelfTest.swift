@@ -122,7 +122,27 @@ enum BackupSelfTest {
         log(restoredCard.reviewLogs.count == 1, "review history preserved")
         log(restoredCard.reviewLogs.first?.grade == .hard, "review grade preserved")
 
-        // 5. Corrupt input must be refused, not silently half-applied.
+        // 5. Automatic backups must actually reach disk and be prunable.
+        let firstAuto = AutoBackup.write(profile: profile, context: context)
+        log(firstAuto != nil, "automatic backup written to \(firstAuto?.lastPathComponent ?? "nothing")")
+        log(AutoBackup.existing().count >= 1, "automatic backup is listed")
+        log(AutoBackup.lastBackupDate() != nil, "automatic backup has a timestamp")
+
+        // Written just now, so a due-check should decline to write another.
+        let second = AutoBackup.runIfDue(profile: profile, context: context)
+        log(second == nil, "a second backup is not written straight away")
+
+        // Restoring from an automatic backup file must work like any other.
+        if let firstAuto, let autoData = try? Data(contentsOf: firstAuto) {
+            let autoTarget = StoredProfile(name: "SelfTest FromAuto")
+            context.insert(autoTarget)
+            let autoSummary = try? service.restore(autoData, into: autoTarget)
+            log(autoSummary?.cardsAdded == 1, "restored from an automatic backup file")
+        } else {
+            log(false, "could not read the automatic backup back")
+        }
+
+        // 6. Corrupt input must be refused, not silently half-applied.
         let before = target.decks.count
         let junk = Data("not a backup".utf8)
         do {

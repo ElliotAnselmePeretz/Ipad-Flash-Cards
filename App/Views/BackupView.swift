@@ -15,6 +15,7 @@ struct BackupView: View {
     @State private var isImporting = false
     @State private var message: String?
     @State private var isError = false
+    @State private var automatic: [URL] = []
 
     private var service: BackupService { BackupService(context: context) }
 
@@ -78,6 +79,51 @@ struct BackupView: View {
                     }
                 }
 
+                WarmCard(padding: 20) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Automatic")
+                                .font(Theme.display(22))
+                                .foregroundStyle(Theme.ink(scheme))
+                            Spacer()
+                            Button("Back up now") { makeAutomaticBackup() }
+                                .buttonStyle(QuietButtonStyle())
+                                .accessibilityIdentifier("backup.now")
+                        }
+                        Text("The app saves a copy to its own storage when you leave it, "
+                             + "keeping the last \(AutoBackup.keepCount). These survive app "
+                             + "updates but not deleting the app, so keep a copy elsewhere too.")
+                            .font(Theme.body(15))
+                            .foregroundStyle(Theme.softInk(scheme))
+
+                        if automatic.isEmpty {
+                            Text("No automatic backups yet.")
+                                .font(Theme.body(14))
+                                .foregroundStyle(Theme.softInk(scheme))
+                                .padding(.top, 2)
+                        } else {
+                            ForEach(automatic, id: \.self) { url in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(url.deletingPathExtension().lastPathComponent
+                                                .replacingOccurrences(of: "InkRecall-", with: ""))
+                                            .font(Theme.body(15))
+                                        Text(sizeLabel(url))
+                                            .font(Theme.body(12))
+                                            .foregroundStyle(Theme.softInk(scheme))
+                                    }
+                                    Spacer()
+                                    Button("Share") { exportURL = url }
+                                        .buttonStyle(QuietButtonStyle())
+                                    Button("Restore") { restore(.success(url)) }
+                                        .buttonStyle(QuietButtonStyle())
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+                }
+
                 if let message {
                     Text(message)
                         .font(Theme.body(15))
@@ -92,6 +138,7 @@ struct BackupView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Theme.page(scheme))
+        .onAppear { automatic = AutoBackup.existing() }
         .navigationTitle("Backup")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $exportURL) { url in
@@ -100,6 +147,20 @@ struct BackupView: View {
         .fileImporter(isPresented: $isImporting,
                       allowedContentTypes: [.json, .data, .item]) { outcome in
             restore(outcome)
+        }
+    }
+
+    private func sizeLabel(_ url: URL) -> String {
+        let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+
+    private func makeAutomaticBackup() {
+        if AutoBackup.write(profile: profile, context: context) != nil {
+            automatic = AutoBackup.existing()
+            show("Saved a backup on this iPad.", error: false)
+        } else {
+            show("Could not save a backup.", error: true)
         }
     }
 
@@ -121,6 +182,7 @@ struct BackupView: View {
             do {
                 let data = try Data(contentsOf: url)
                 let summary = try service.restore(data, into: profile)
+                automatic = AutoBackup.existing()
                 show("Restored ^[\(summary.decksAdded) deck](inflect: true) "
                      + "and ^[\(summary.cardsAdded) card](inflect: true).", error: false)
             } catch {
