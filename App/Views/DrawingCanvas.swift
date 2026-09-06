@@ -1,5 +1,6 @@
 import SwiftUI
 import PencilKit
+import FlashcardsCore
 
 /// Wraps `PKCanvasView`.
 ///
@@ -38,6 +39,10 @@ struct DrawingCanvas: UIViewRepresentable {
 
     /// Called when a finger taps, or swipes left/right, on the canvas.
     var onFlip: (() -> Void)?
+
+    /// Scratch a stroke out to delete it, the way you would on paper. Detection can
+    /// misfire on unusual handwriting, so it is switchable from the tool bar.
+    @AppStorage("scribbleToErase") private var scribbleToErase = true
 
     /// UI tests cannot synthesise Apple Pencil input, so they opt into finger drawing
     /// through a launch argument. Nothing ships with this enabled.
@@ -151,8 +156,49 @@ struct DrawingCanvas: UIViewRepresentable {
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) { isEditing = false }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            if parent.scribbleToErase, applyScribbleErase(on: canvasView) { return }
             let encoded = canvasView.drawing.dataRepresentation()
             if parent.data != encoded { parent.data = encoded }
+        }
+
+        // MARK: - Scribble to erase
+
+        private let detector = ScribbleDetector()
+
+        /// If the stroke just drawn was a scratch-out, delete it and whatever it crossed.
+        /// Returns true when it acted, so the caller does not also save the scribble.
+        private func applyScribbleErase(on canvasView: PKCanvasView) -> Bool {
+            let strokes = canvasView.drawing.strokes
+            guard strokes.count >= 2, let last = strokes.last else { return false }
+
+            let scribblePoints = points(of: last)
+            guard detector.isScribble(scribblePoints) else { return false }
+
+            let others = strokes.dropLast().map(points(of:))
+            let crossed = Set(detector.strokesCrossed(by: scribblePoints, candidates: Array(others)))
+            guard !crossed.isEmpty else { return false }
+
+            // Drop the crossed strokes and the scratch-out itself.
+            var remaining: [PKStroke] = []
+            for (index, stroke) in strokes.enumerated() {
+                if index == strokes.count - 1 { continue }
+                if crossed.contains(index) { continue }
+                remaining.append(stroke)
+            }
+
+            let updated = PKDrawing(strokes: remaining)
+            canvasView.drawing = updated
+            parent.data = updated.dataRepresentation()
+
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return true
+        }
+
+        /// A stroke's path in canvas coordinates, sampled evenly.
+        private func points(of stroke: PKStroke) -> [CGPoint] {
+            stroke.path
+                .interpolatedPoints(by: .distance(6))
+                .map { $0.location.applying(stroke.transform) }
         }
     }
 }

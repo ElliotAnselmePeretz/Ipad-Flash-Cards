@@ -12,6 +12,7 @@ struct InkToolbar: View {
     @Binding var width: InkWidth
 
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("scribbleToErase") private var scribbleToErase = true
 
     var body: some View {
         HStack(spacing: 18) {
@@ -20,11 +21,34 @@ struct InkToolbar: View {
             widthGroup
             Divider().frame(height: 22)
             colorGroup
+            Divider().frame(height: 22)
+            scribbleToggle
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.bar)
+    }
+
+    /// Scratch a stroke out to delete it. Off is a legitimate choice: some handwriting
+    /// looks enough like a scratch-out to trip it.
+    private var scribbleToggle: some View {
+        Button {
+            scribbleToErase.toggle()
+        } label: {
+            Image(systemName: "scribble.variable")
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 36, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(scribbleToErase ? Color.accentColor.opacity(0.18) : .clear)
+                )
+                .foregroundStyle(scribbleToErase ? Color.accentColor : .secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Scribble to erase")
+        .accessibilityValue(scribbleToErase ? "On" : "Off")
+        .accessibilityIdentifier("ink.scribbleErase")
     }
 
     private var toolGroup: some View {
