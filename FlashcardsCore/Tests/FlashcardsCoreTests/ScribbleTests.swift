@@ -163,6 +163,41 @@ final class ScribbleDetectorTests: XCTestCase {
                       "a few quick passes over a word should be enough")
     }
 
+    // MARK: - Less scribbling when clearly on top of something
+
+    /// The point of the change: two quick passes over a word should be enough.
+    func testTwoPassesOverAWordIsEnough() {
+        let quick = scribble(passes: 2)
+        XCTAssertTrue(detector.isScribble(quick, duration: 0.18, over: [word()]),
+                      "crossing something out is two strokes, not eight")
+    }
+
+    func testThreePassesOverAWordIsEnough() {
+        XCTAssertTrue(detector.isScribble(scribble(passes: 3), duration: 0.25, over: [word()]))
+    }
+
+    /// The relaxation applies only on top of ink. On blank paper nothing is relaxed.
+    func testTwoPassesOnBlankPaperDeletesNothing() {
+        XCTAssertFalse(detector.isScribble(scribble(passes: 2), duration: 0.18, over: []))
+    }
+
+    func testTwoPassesAwayFromInkDeletesNothing() {
+        XCTAssertFalse(detector.isScribble(scribble(passes: 2), duration: 0.18, over: [word(y: 900)]))
+    }
+
+    /// Drawing over your own work slowly is still drawing.
+    func testSlowlyGoingOverExistingInkIsNotDeletion() {
+        XCTAssertFalse(detector.isScribble(scribble(passes: 3), duration: 4.0, over: [word()]),
+                       "deliberate work on top of a drawing must survive")
+    }
+
+    func testStrongOverlapPathIsNamedWhenItRefuses() {
+        let tiny = detector.measure(scribble(width: 10, passes: 2), duration: 0.1, over: [word(y: 100)])
+        XCTAssertFalse(tiny.isScribble)
+        XCTAssertTrue(tiny.rejectedBy?.contains("strong") ?? false,
+                      "a stroke over ink should be judged by the relaxed rules")
+    }
+
     // MARK: - Measurement
 
     func testMeasurementAgreesWithTheDecision() {

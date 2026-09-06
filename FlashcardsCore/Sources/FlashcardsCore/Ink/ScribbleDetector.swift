@@ -30,16 +30,31 @@ public struct ScribbleDetector: Sendable {
     /// back and forth across something already on the page, while writing lands on blank
     /// paper. Requiring real overlap means far fewer passes are needed to be sure.
     public var minimumOverlap: CGFloat
+    /// Overlap above which the stroke is so plainly on top of something that the shape
+    /// rules are relaxed: a couple of quick passes is enough to mean "get rid of this".
+    public var strongOverlap: CGFloat
+    /// What a stroke needs when it is clearly over existing ink.
+    public var strongOverlapReversals: Int
+    public var strongOverlapLength: CGFloat
+    /// A floor that still applies: dragging slowly over your own work is drawing, not
+    /// deleting, however much of it is on top.
+    public var strongOverlapSpeed: CGFloat
 
     public init(minimumReversals: Int = 3, minimumDensity: CGFloat = 1.8,
                 minimumLength: CGFloat = 60, minimumSpeed: CGFloat = 300,
-                minimumElongation: CGFloat = 1.2, minimumOverlap: CGFloat = 0.55) {
+                minimumElongation: CGFloat = 1.2, minimumOverlap: CGFloat = 0.55,
+                strongOverlap: CGFloat = 0.7, strongOverlapReversals: Int = 2,
+                strongOverlapLength: CGFloat = 35, strongOverlapSpeed: CGFloat = 140) {
         self.minimumReversals = minimumReversals
         self.minimumDensity = minimumDensity
         self.minimumLength = minimumLength
         self.minimumSpeed = minimumSpeed
         self.minimumElongation = minimumElongation
         self.minimumOverlap = minimumOverlap
+        self.strongOverlap = strongOverlap
+        self.strongOverlapReversals = strongOverlapReversals
+        self.strongOverlapLength = strongOverlapLength
+        self.strongOverlapSpeed = strongOverlapSpeed
     }
 
     /// The fraction of `stroke` lying on top of ink already on the page, 0...1.
@@ -107,16 +122,32 @@ public struct ScribbleDetector: Sendable {
 
         let overlapRatio = overlap(of: points, over: candidates)
 
+        // Two routes to the same conclusion.
+        //
+        // When a stroke is plainly on top of existing ink, the overlap itself is the
+        // evidence and barely any scribbling is needed — two passes back and forth is
+        // exactly what people do to cross something out. Only when the overlap is
+        // marginal do the full shape rules have to be satisfied instead.
         var rejected: String?
-        if points.count < 8 { rejected = "points" }
-        else if length < minimumLength { rejected = "length" }
-        else if diagonal <= 0 { rejected = "diagonal" }
-        else if density < minimumDensity { rejected = "density" }
-        else if elongation < minimumElongation { rejected = "elongation" }
-        else if reversalCount < minimumReversals { rejected = "reversals" }
-        else if seconds <= 0 { rejected = "no-timing" }
-        else if speed < minimumSpeed { rejected = "speed" }
-        else if overlapRatio < minimumOverlap { rejected = "overlap" }
+        if points.count < 8 {
+            rejected = "points"
+        } else if diagonal <= 0 {
+            rejected = "diagonal"
+        } else if seconds <= 0 {
+            rejected = "no-timing"
+        } else if overlapRatio >= strongOverlap {
+            if length < strongOverlapLength { rejected = "length(strong)" }
+            else if reversalCount < strongOverlapReversals { rejected = "reversals(strong)" }
+            else if speed < strongOverlapSpeed { rejected = "speed(strong)" }
+        } else if overlapRatio >= minimumOverlap {
+            if length < minimumLength { rejected = "length" }
+            else if density < minimumDensity { rejected = "density" }
+            else if elongation < minimumElongation { rejected = "elongation" }
+            else if reversalCount < minimumReversals { rejected = "reversals" }
+            else if speed < minimumSpeed { rejected = "speed" }
+        } else {
+            rejected = "overlap"
+        }
 
         return Measurement(
             pointCount: points.count, length: length, diagonal: diagonal, density: density,
