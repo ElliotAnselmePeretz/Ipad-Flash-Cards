@@ -140,3 +140,88 @@ final class StudyPlannerTests: XCTestCase {
         XCTAssertEqual(planner.decksNeedingAttention([bad, worse]).first?.id, worse.id)
     }
 }
+
+final class StudyGoalTests: XCTestCase {
+
+    private func deck(_ name: String, due: Int, recall: Double = 0.8) -> DeckWorkload {
+        DeckWorkload(id: UUID(), name: name, dueCount: due, recallProbability: recall,
+                     hasBeenStudied: true, daysSinceLastReview: 1)
+    }
+
+    private func settings(goals: [StudyGoal], maxMinutes: Int = 15) -> StudyPlanSettings {
+        var s = StudyPlanSettings.default
+        s.isEnabled = true
+        s.goals = goals
+        s.slots = [StudySlot(hour: 9)]
+        s.maximumSessionMinutes = maxMinutes
+        return s
+    }
+
+    func testDecksForTheNextTestComeFirstEvenIfTheyAreStrong() {
+        let exam = deck("Exam material", due: 10, recall: 0.95)
+        let weak = deck("Something else", due: 10, recall: 0.20)
+        let goal = StudyGoal(name: "Mock", date: Date().addingTimeInterval(5 * 86_400), deckIDs: [exam.id])
+
+        let plan = StudyPlanner(settings: settings(goals: [goal]), secondsPerCard: 8)
+            .plan(for: [weak, exam])
+        XCTAssertEqual(plan.sessions.first?.deckIDs.first, exam.id,
+                       "what is being tested should be studied first")
+    }
+
+    func testTheSoonestUpcomingGoalIsTheOneThatCounts() {
+        let soon = StudyGoal(name: "Soon", date: Date().addingTimeInterval(2 * 86_400), deckIDs: [])
+        let later = StudyGoal(name: "Later", date: Date().addingTimeInterval(40 * 86_400), deckIDs: [])
+        let planner = StudyPlanner(settings: settings(goals: [later, soon]))
+        XCTAssertEqual(planner.nextGoal()?.name, "Soon")
+    }
+
+    func testPastGoalsAreIgnored() {
+        let past = StudyGoal(name: "Gone", date: Date().addingTimeInterval(-3 * 86_400), deckIDs: [])
+        XCTAssertNil(StudyPlanner(settings: settings(goals: [past])).nextGoal())
+    }
+
+    func testSittingsGrowAsTheTestApproaches() {
+        let cards = [deck("A", due: 500)]
+        let far = StudyGoal(name: "Far", date: Date().addingTimeInterval(30 * 86_400), deckIDs: [])
+        let tomorrow = StudyGoal(name: "Tomorrow", date: Date().addingTimeInterval(86_400), deckIDs: [])
+
+        let relaxed = StudyPlanner(settings: settings(goals: [far]), secondsPerCard: 8).plan(for: cards)
+        let urgent = StudyPlanner(settings: settings(goals: [tomorrow]), secondsPerCard: 8).plan(for: cards)
+
+        XCTAssertGreaterThan(urgent.totalCards, relaxed.totalCards,
+                             "a test tomorrow should pull more work forward")
+    }
+
+    func testNoGoalMeansNormalPacing() {
+        let cards = [deck("A", due: 500)]
+        let none = StudyPlanner(settings: settings(goals: []), secondsPerCard: 8).plan(for: cards)
+        for session in none.sessions {
+            XCTAssertLessThanOrEqual(session.estimatedMinutes, 15)
+        }
+    }
+
+    func testThePlanReportsWhatItIsWorkingTowards() {
+        let goal = StudyGoal(name: "Physics", date: Date().addingTimeInterval(4 * 86_400), deckIDs: [])
+        let plan = StudyPlanner(settings: settings(goals: [goal]), secondsPerCard: 8)
+            .plan(for: [deck("A", due: 5)])
+        XCTAssertEqual(plan.goal?.name, "Physics")
+    }
+
+    func testCountdownReadsNaturally() {
+        let now = Date()
+        XCTAssertEqual(StudyGoal(name: "x", date: now, deckIDs: []).countdown(from: now), "today")
+        XCTAssertEqual(StudyGoal(name: "x", date: now.addingTimeInterval(86_400 * 1.2), deckIDs: []).countdown(from: now), "tomorrow")
+        XCTAssertEqual(StudyGoal(name: "x", date: now.addingTimeInterval(86_400 * 4.2), deckIDs: []).countdown(from: now), "in 4 days")
+    }
+
+    func testOldSettingsWithoutGoalsStillDecode() throws {
+        let legacy = """
+        {"isEnabled":true,"deckIDs":[],"slots":[{"hour":8,"minute":0}],
+         "maximumSessionMinutes":20,"nudgeAfterDays":2,"nudgeBelowRecall":0.7}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(StudyPlanSettings.self, from: legacy)
+        XCTAssertTrue(decoded.isEnabled)
+        XCTAssertEqual(decoded.goals, [], "an update must not discard an existing plan")
+        XCTAssertEqual(decoded.maximumSessionMinutes, 20)
+    }
+}

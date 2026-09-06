@@ -8,6 +8,7 @@ struct DeckListView: View {
 
     @Environment(\.modelContext) private var context
     @AppStorage("appearance") private var appearance = Appearance.system
+    @AppStorage("studyPlanSettings") private var planSettingsData = Data()
     @Environment(\.colorScheme) private var scheme
     @State private var newDeckName = ""
     @State private var isAddingDeck = false
@@ -63,6 +64,79 @@ struct DeckListView: View {
         }
     }
 
+    private var planSettings: StudyPlanSettings {
+        (try? JSONDecoder().decode(StudyPlanSettings.self, from: planSettingsData)) ?? .default
+    }
+
+    /// The plan lived behind a menu, which meant nobody found it. It belongs on the first
+    /// screen: either today's sittings, or an invitation to set them up.
+    @ViewBuilder
+    private var planCard: some View {
+        let settings = planSettings
+        if settings.isEnabled {
+            let planner = PlanBuilder.planner(for: profile, settings: settings)
+            let plan = planner.plan(for: PlanBuilder.workloads(for: profile))
+            WarmCard(padding: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Label("Study plan", systemImage: "calendar")
+                            .font(Theme.label(15))
+                            .foregroundStyle(Theme.accent(scheme))
+                        Spacer()
+                        if let goal = plan.goal {
+                            Text("\(goal.name) \(goal.countdown())")
+                                .font(Theme.body(13))
+                                .foregroundStyle(Theme.softInk(scheme))
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.softInk(scheme))
+                    }
+
+                    if plan.isEmpty {
+                        Text("Nothing due today.")
+                            .font(Theme.body(15))
+                            .foregroundStyle(Theme.softInk(scheme))
+                    } else {
+                        HStack(spacing: 18) {
+                            ForEach(plan.sessions) { session in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(session.label)
+                                        .font(Theme.label(16))
+                                        .foregroundStyle(Theme.ink(scheme))
+                                    Text("^[\(session.cardCount) card](inflect: true) · \(session.estimatedMinutes)m")
+                                        .font(Theme.body(12))
+                                        .foregroundStyle(Theme.softInk(scheme))
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        } else {
+            WarmCard(padding: 18) {
+                HStack(spacing: 14) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 24, weight: .light))
+                        .foregroundStyle(Theme.accent(scheme))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Make a study plan")
+                            .font(Theme.label(16))
+                            .foregroundStyle(Theme.ink(scheme))
+                        Text("Short sittings, reminders, and test dates that jump the queue.")
+                            .font(Theme.body(13))
+                            .foregroundStyle(Theme.softInk(scheme))
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.softInk(scheme))
+                }
+            }
+        }
+    }
+
     private var greeting: String {
         switch Calendar.current.component(.hour, from: Date()) {
         case 5..<12: "Good morning"
@@ -112,6 +186,13 @@ struct DeckListView: View {
                         OverallProgressView(profile: profile)
                     } label: {
                         summaryHeader
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink {
+                        StudyPlanView(profile: profile)
+                    } label: {
+                        planCard
                     }
                     .buttonStyle(.plain)
                     .padding(.bottom, 4)

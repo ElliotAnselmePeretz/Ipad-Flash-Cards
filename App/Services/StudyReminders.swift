@@ -54,7 +54,11 @@ final class StudyReminders {
             components.minute = session.minute
 
             let content = UNMutableNotificationContent()
-            content.title = "Time to review"
+            if let goal = plan.goal {
+                content.title = "\(goal.name) — \(goal.countdown())"
+            } else {
+                content.title = "Time to review"
+            }
             content.body = session.cardCount == 1
                 ? "1 card, about a minute."
                 : "\(session.cardCount) cards, about \(session.estimatedMinutes) minutes."
