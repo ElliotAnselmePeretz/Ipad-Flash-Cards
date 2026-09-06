@@ -60,16 +60,18 @@ struct DrawingCanvas: UIViewRepresentable {
         }
 
         if onFlip != nil {
-            // Finger gestures are free precisely because the pen owns the ink.
+            // A single deliberate fingertip tap, and nothing else.
+            //
+            // The first version also accepted swipes, and accepted any direct touch. A
+            // resting palm is a direct touch, and dragging a hand across the page looks
+            // like a swipe, so the card flipped constantly while writing. Swipes are gone,
+            // and the delegate now rejects anything that is not a small fingertip.
             let tap = UITapGestureRecognizer(target: context.coordinator,
                                              action: #selector(Coordinator.handleFlip))
             tap.numberOfTapsRequired = 1
-            for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
-                let swipe = UISwipeGestureRecognizer(target: context.coordinator,
-                                                     action: #selector(Coordinator.handleFlip))
-                swipe.direction = direction
-                canvas.addGestureRecognizer(swipe)
-            }
+            tap.numberOfTouchesRequired = 1
+            tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+            tap.delegate = context.coordinator
             canvas.addGestureRecognizer(tap)
         }
 
@@ -95,7 +97,7 @@ struct DrawingCanvas: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, PKCanvasViewDelegate {
+    final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDelegate {
         var parent: DrawingCanvas
         var isEditing = false
 
@@ -114,6 +116,30 @@ struct DrawingCanvas: UIViewRepresentable {
 
         @objc func handleFlip() {
             parent.onFlip?()
+        }
+
+        /// A fingertip contact patch is small; a palm or forearm is not. iPadOS reports
+        /// the contact radius, so the two can be told apart before the tap ever fires.
+        private static let maximumFingertipRadius: CGFloat = 30
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldReceive touch: UITouch) -> Bool {
+            // The Pencil draws; it never navigates.
+            guard touch.type == .direct else { return false }
+
+            // Reject broad contacts: resting palms, knuckles, a forearm on the page.
+            if touch.majorRadius > Self.maximumFingertipRadius { return false }
+
+            // While ink is being laid down, a stray hand touch is not a deliberate tap.
+            if isEditing { return false }
+
+            return true
+        }
+
+        /// Never let the flip tap pre-empt PencilKit's own gestures.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            false
         }
 
         func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) { isEditing = true }

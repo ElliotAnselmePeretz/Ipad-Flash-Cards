@@ -6,6 +6,7 @@ struct FlashcardsApp: App {
     /// Foreground time is only measurable while the app is running, so this starts
     /// counting from first launch — there is no history to backfill.
     @State private var usage = UsageTracker()
+    @State private var reminders = StudyReminders()
     /// Local-only for now. Switching to `cloudKitDatabase: .automatic` is the one-line
     /// change that turns this into a synced app — the models are already shaped for it
     /// (UUID keys, modifiedAt, soft deletes, every record scoped by profile).
@@ -26,6 +27,7 @@ struct FlashcardsApp: App {
         WindowGroup {
             RootView()
                 .environment(usage)
+                .environment(reminders)
         }
         .modelContainer(container)
     }

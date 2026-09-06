@@ -338,3 +338,84 @@ final class SuspensionAndLearnAheadTests: XCTestCase {
         XCTAssertEqual(queue.first?.id, due.id, "don't show a card early while one is overdue")
     }
 }
+
+final class MemoryEstimateTests: XCTestCase {
+
+    let estimator = MemoryEstimator()
+
+    private func studied(stability: Double, daysAgo: Double, now: Date) -> SchedulingState {
+        var state = SchedulingState.new(now: now)
+        state.phase = .review
+        state.memory = MemoryState(stability: stability, difficulty: 5)
+        state.lastReviewedAt = now.addingTimeInterval(-daysAgo * 86_400)
+        return state
+    }
+
+    func testAFreshlyStudiedCardIsAlmostFullyRemembered() {
+        let now = Date()
+        let r = estimator.recallProbability(for: studied(stability: 10, daysAgo: 0, now: now), now: now)
+        XCTAssertEqual(r ?? 0, 1.0, accuracy: 0.01)
+    }
+
+    func testRecallIsNinetyPercentAtExactlyOneStability() {
+        let now = Date()
+        let r = estimator.recallProbability(for: studied(stability: 10, daysAgo: 10, now: now), now: now)
+        XCTAssertEqual(r ?? 0, 0.9, accuracy: 0.01)
+    }
+
+    func testRecallFallsAsTimePasses() {
+        let now = Date()
+        let recent = estimator.recallProbability(for: studied(stability: 10, daysAgo: 1, now: now), now: now) ?? 0
+        let old = estimator.recallProbability(for: studied(stability: 10, daysAgo: 60, now: now), now: now) ?? 0
+        XCTAssertGreaterThan(recent, old)
+    }
+
+    func testStrongerMemoriesDecaySlower() {
+        let now = Date()
+        let weak = estimator.recallProbability(for: studied(stability: 5, daysAgo: 30, now: now), now: now) ?? 0
+        let strong = estimator.recallProbability(for: studied(stability: 200, daysAgo: 30, now: now), now: now) ?? 0
+        XCTAssertGreaterThan(strong, weak)
+    }
+
+    func testUnstudiedCardsHaveNoEstimateAndAreCountedSeparately() {
+        let now = Date()
+        XCTAssertNil(estimator.recallProbability(for: .new(now: now), now: now))
+
+        let estimate = estimator.estimate(for: [.new(now: now), studied(stability: 10, daysAgo: 0, now: now)], now: now)
+        XCTAssertEqual(estimate.consideredCards, 1)
+        XCTAssertEqual(estimate.unseenCards, 1)
+        XCTAssertEqual(estimate.recallProbability, 1.0, accuracy: 0.01,
+                       "a never-seen card must not drag the figure down")
+    }
+
+    func testDeckEstimateIsTheAverageAcrossCards() {
+        let now = Date()
+        let states = [
+            studied(stability: 10, daysAgo: 10, now: now),   // 0.90
+            studied(stability: 10, daysAgo: 10, now: now),   // 0.90
+        ]
+        XCTAssertEqual(estimator.estimate(for: states, now: now).recallProbability,
+                       0.9, accuracy: 0.01)
+    }
+
+    func testEmptyDeckReportsNothingRatherThanZeroPercent() {
+        let estimate = estimator.estimate(for: [])
+        XCTAssertTrue(estimate.isEmpty)
+        XCTAssertEqual(estimate.summary, "Not studied yet")
+    }
+
+    func testSummaryDescribesTheNumber() {
+        XCTAssertEqual(MemoryEstimate(recallProbability: 0.95, consideredCards: 1, unseenCards: 0).summary, "Solid")
+        XCTAssertEqual(MemoryEstimate(recallProbability: 0.60, consideredCards: 1, unseenCards: 0).summary, "Slipping")
+        XCTAssertEqual(MemoryEstimate(recallProbability: 0.10, consideredCards: 1, unseenCards: 0).summary, "Mostly forgotten")
+    }
+
+    func testSuspendedCardsStillCountTowardWhatYouHaveForgotten() {
+        let now = Date()
+        var suspended = studied(stability: 2, daysAgo: 90, now: now)
+        suspended.isSuspended = true
+        let estimate = estimator.estimate(for: [suspended], now: now)
+        XCTAssertEqual(estimate.consideredCards, 1)
+        XCTAssertLessThan(estimate.recallProbability, 0.5)
+    }
+}

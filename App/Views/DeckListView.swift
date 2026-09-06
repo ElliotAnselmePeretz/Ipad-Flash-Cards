@@ -13,8 +13,28 @@ struct DeckListView: View {
     @State private var isAddingDeck = false
     @State private var writingInto: StoredDeck?
 
+    private static let estimator = MemoryEstimator()
+
+    static func memory(for deck: StoredDeck, now: Date = Date()) -> MemoryEstimate {
+        estimator.estimate(
+            for: deck.cards.filter { $0.deletedAt == nil }.map(\.scheduling),
+            now: now
+        )
+    }
+
+    /// Ordered by what you are closest to forgetting, so the deck that needs you is first.
+    /// Decks with nothing studied yet sort last: there is nothing to lose there.
     private var decks: [StoredDeck] {
-        profile.decks.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+        profile.decks
+            .filter { $0.deletedAt == nil }
+            .sorted { a, b in
+                let ma = Self.memory(for: a), mb = Self.memory(for: b)
+                if ma.isEmpty != mb.isEmpty { return !ma.isEmpty }
+                if ma.recallProbability != mb.recallProbability {
+                    return ma.recallProbability < mb.recallProbability
+                }
+                return a.createdAt < b.createdAt
+            }
     }
 
     /// Totals across every deck, so the first screen says something rather than being a
@@ -167,6 +187,11 @@ struct DeckListView: View {
                         }
                         Divider()
                         NavigationLink {
+                            StudyPlanView(profile: profile)
+                        } label: {
+                            Label("Study plan", systemImage: "calendar")
+                        }
+                        NavigationLink {
                             BackupView(profile: profile)
                         } label: {
                             Label("Backup", systemImage: "externaldrive")
@@ -210,7 +235,7 @@ private struct DeckRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text(deck.name).font(Theme.display(20))
                 HStack(spacing: 8) {
                     Text("^[\(liveCards.count) card](inflect: true)")
@@ -227,6 +252,8 @@ private struct DeckRow: View {
                             .foregroundStyle(Theme.accent(scheme))
                     }
                 }
+                MemoryBar(estimate: DeckListView.memory(for: deck))
+                    .padding(.top, 1)
             }
             Spacer()
             let c = counts
