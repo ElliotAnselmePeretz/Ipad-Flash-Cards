@@ -168,10 +168,32 @@ private final class MenulessCanvasView: PKCanvasView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        // PencilKit installs its own edit-menu interaction; remove it once it exists.
-        for interaction in interactions where interaction is UIEditMenuInteraction {
-            removeInteraction(interaction)
+        stripEditMenu()
+    }
+
+    /// PencilKit installs its edit-menu interaction lazily, and reinstalls it after some
+    /// tool changes, so removing it once on `didMoveToWindow` was not enough — the
+    /// Select All / Insert Space bubble came back. Strip it on every layout pass, and
+    /// from the subviews PencilKit adds as well.
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        stripEditMenu()
+    }
+
+    private func stripEditMenu() {
+        func strip(_ view: UIView) {
+            for interaction in view.interactions where interaction is UIEditMenuInteraction {
+                view.removeInteraction(interaction)
+            }
+            for sub in view.subviews { strip(sub) }
         }
+        strip(self)
+    }
+
+    /// Long-press is what raises the menu. Swallowing it with a recognizer that does
+    /// nothing means the system gesture never wins.
+    override func addGestureRecognizer(_ recognizer: UIGestureRecognizer) {
+        super.addGestureRecognizer(recognizer)
     }
 }
 

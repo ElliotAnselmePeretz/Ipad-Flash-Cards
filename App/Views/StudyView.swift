@@ -108,6 +108,11 @@ struct StudyView: View {
             cardFace(session: session, card: card)
                 .frame(maxWidth: 720)
                 .padding(.horizontal, 24)
+                .onFingertipTap {
+                    if session.stage == .question { reveal(session) }
+                }
+                .accessibilityAddTraits(session.stage == .question ? .isButton : [])
+                .accessibilityHint(session.stage == .question ? "Tap to show the answer" : "")
                 // A real flip: the card turns over to show its other side.
                 .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
                 .animation(.spring(response: 0.5, dampingFraction: 0.78), value: flipped)
@@ -142,6 +147,12 @@ struct StudyView: View {
                     .font(Theme.label(11))
                     .tracking(1.4)
                     .foregroundStyle(Theme.softInk(scheme))
+
+                if session.stage == .question {
+                    Text("Tap the card to show the answer")
+                        .font(Theme.body(12))
+                        .foregroundStyle(Theme.softInk(scheme).opacity(0.7))
+                }
 
                 side(session.stage == .question ? .front : .back, of: card)
                     .frame(maxWidth: .infinity, minHeight: 260)

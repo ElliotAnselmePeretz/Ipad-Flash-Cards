@@ -39,11 +39,11 @@ enum Theme {
                         : Color(red: 0.86, green: 0.51, blue: 0.24)
     }
 
-    /// The ambient glow. Light mode gets a soft sky blue, which reads as cool light on
-    /// warm paper rather than the paper itself glowing; dark mode uses a deeper blue so
-    /// the effect stays recognisably the same thing.
+    /// The ambient glow. Light mode gets a soft sky blue — cool light falling on warm
+    /// paper. Dark mode keeps the warm accent instead: a blue halo on a dark brown ground
+    /// reads as a screen glitch rather than light.
     static func glow(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(red: 0.42, green: 0.60, blue: 0.86)
+        scheme == .dark ? Color(red: 0.95, green: 0.68, blue: 0.42)
                         : Color(red: 0.53, green: 0.76, blue: 0.94)
     }
 

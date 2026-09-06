@@ -384,3 +384,56 @@ struct HeaderGlyph: View {
             .accessibilityLabel(label)
     }
 }
+
+/// A transparent layer that reports deliberate fingertip taps and ignores everything else.
+///
+/// SwiftUI's `onTapGesture` fires for any touch, including a resting palm, and gives no
+/// way to inspect the contact. UIKit does: a fingertip's contact patch is small, a palm's
+/// is not, so the two can be told apart before the tap is delivered.
+struct PalmSafeTapArea: UIViewRepresentable {
+    /// Contacts wider than this are hands, not fingers.
+    static let maximumFingertipRadius: CGFloat = 30
+
+    let onTap: () -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+
+        let tap = UITapGestureRecognizer(target: context.coordinator,
+                                         action: #selector(Coordinator.handleTap))
+        tap.numberOfTapsRequired = 1
+        tap.numberOfTouchesRequired = 1
+        // The Pencil writes; it does not navigate.
+        tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        tap.delegate = context.coordinator
+        view.addGestureRecognizer(tap)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.onTap = onTap
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onTap: () -> Void
+
+        init(onTap: @escaping () -> Void) { self.onTap = onTap }
+
+        @objc func handleTap() { onTap() }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldReceive touch: UITouch) -> Bool {
+            touch.type == .direct && touch.majorRadius <= PalmSafeTapArea.maximumFingertipRadius
+        }
+    }
+}
+
+extension View {
+    /// Taps from a fingertip only. A resting palm, a knuckle or the Pencil are ignored.
+    func onFingertipTap(perform action: @escaping () -> Void) -> some View {
+        overlay(PalmSafeTapArea(onTap: action))
+    }
+}
