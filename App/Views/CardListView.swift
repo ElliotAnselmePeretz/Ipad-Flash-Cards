@@ -165,6 +165,9 @@ struct CardEditorView: View {
                 DrawingCanvas(
                     data: side == .front ? $card.frontDrawing : $card.backDrawing,
                     tool: tool, color: inkColor, width: inkWidth,
+                    onFlip: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        side = side == .front ? .back : .front
+                    } }
                 )
                 .id(side)
 

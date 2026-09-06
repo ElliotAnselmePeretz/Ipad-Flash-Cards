@@ -16,14 +16,27 @@ public struct ScribbleDetector: Sendable {
     public var minimumDensity: CGFloat
     /// Ignore very short marks: a flick of the pen is not a deletion.
     public var minimumLength: CGFloat
+    /// Points per second. Crossing something out is a fast, careless movement; writing is
+    /// slow and deliberate even when it loops. Speed is the signal that best separates the
+    /// two, and shape alone was deleting far too much.
+    public var minimumSpeed: CGFloat
+    /// A scratch-out is roughly a band: wide along one axis, shallow across it. Writing
+    /// fills its box more evenly.
+    public var minimumElongation: CGFloat
 
-    public init(minimumReversals: Int = 5, minimumDensity: CGFloat = 2.4, minimumLength: CGFloat = 60) {
+    public init(minimumReversals: Int = 7, minimumDensity: CGFloat = 3.4,
+                minimumLength: CGFloat = 110, minimumSpeed: CGFloat = 900,
+                minimumElongation: CGFloat = 1.8) {
         self.minimumReversals = minimumReversals
         self.minimumDensity = minimumDensity
         self.minimumLength = minimumLength
+        self.minimumSpeed = minimumSpeed
+        self.minimumElongation = minimumElongation
     }
 
-    public func isScribble(_ points: [CGPoint]) -> Bool {
+    /// `duration` is how long the stroke took. Without it, speed cannot be judged and the
+    /// stroke is refused: deleting someone's work on a guess is worse than doing nothing.
+    public func isScribble(_ points: [CGPoint], duration: TimeInterval? = nil) -> Bool {
         guard points.count >= 8 else { return false }
 
         let length = pathLength(points)
@@ -32,9 +45,17 @@ public struct ScribbleDetector: Sendable {
         let box = boundingBox(points)
         let diagonal = sqrt(box.width * box.width + box.height * box.height)
         guard diagonal > 0 else { return false }
-
         guard length / diagonal >= minimumDensity else { return false }
-        return reversals(points) >= minimumReversals
+
+        // Long and thin, the shape of scratching something out.
+        let long = max(box.width, box.height)
+        let short = max(min(box.width, box.height), 1)
+        guard long / short >= minimumElongation else { return false }
+
+        guard reversals(points) >= minimumReversals else { return false }
+
+        guard let duration, duration > 0 else { return false }
+        return length / CGFloat(duration) >= minimumSpeed
     }
 
     /// Direction changes along whichever axis the stroke travels furthest on.

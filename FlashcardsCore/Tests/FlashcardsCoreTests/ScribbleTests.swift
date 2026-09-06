@@ -29,11 +29,11 @@ final class ScribbleDetectorTests: XCTestCase {
     // MARK: - Detection
 
     func testADenseZigZagIsAScribble() {
-        XCTAssertTrue(detector.isScribble(scribble()))
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35))
     }
 
     func testAStraightLineIsNot() {
-        XCTAssertFalse(detector.isScribble(line(from: .zero, to: CGPoint(x: 300, y: 0))))
+        XCTAssertFalse(detector.isScribble(line(from: .zero, to: CGPoint(x: 300, y: 0)), duration: 0.3))
     }
 
     func testASingleCurveIsNot() {
@@ -41,7 +41,7 @@ final class ScribbleDetectorTests: XCTestCase {
             let t = CGFloat(i) / 40 * .pi
             return CGPoint(x: cos(t) * 100 + 100, y: sin(t) * 100)
         }
-        XCTAssertFalse(detector.isScribble(arc))
+        XCTAssertFalse(detector.isScribble(arc, duration: 0.3))
     }
 
     /// The case that matters: handwriting must survive.
@@ -50,13 +50,13 @@ final class ScribbleDetectorTests: XCTestCase {
         let w = [CGPoint(x: 0, y: 0), CGPoint(x: 10, y: 40), CGPoint(x: 20, y: 5),
                  CGPoint(x: 30, y: 40), CGPoint(x: 40, y: 0)]
         let dense = w.flatMap { p in [p, p, p] }   // sampled finely, as a real stroke would be
-        XCTAssertFalse(detector.isScribble(dense))
+        XCTAssertFalse(detector.isScribble(dense, duration: 0.3))
     }
 
     func testTheLetterMIsNotAScribble() {
         let m = [CGPoint(x: 0, y: 40), CGPoint(x: 0, y: 0), CGPoint(x: 15, y: 25),
                  CGPoint(x: 30, y: 0), CGPoint(x: 30, y: 40)]
-        XCTAssertFalse(detector.isScribble(m))
+        XCTAssertFalse(detector.isScribble(m, duration: 0.4))
     }
 
     func testACursiveWordIsNotAScribble() {
@@ -65,21 +65,53 @@ final class ScribbleDetectorTests: XCTestCase {
             let x = CGFloat(i) * 4
             return CGPoint(x: x, y: sin(CGFloat(i) / 2) * 12)
         }
-        XCTAssertFalse(detector.isScribble(word),
+        XCTAssertFalse(detector.isScribble(word, duration: 1.2),
                        "writing moves across the page; a scribble stays put")
     }
 
     func testATinyScratchIsIgnored() {
-        XCTAssertFalse(detector.isScribble(scribble(width: 8, passes: 6)),
+        XCTAssertFalse(detector.isScribble(scribble(width: 8, passes: 6), duration: 0.2),
                        "a flick of the pen should not delete anything")
     }
 
     func testTooFewPointsIsNotAScribble() {
-        XCTAssertFalse(detector.isScribble([CGPoint(x: 0, y: 0), CGPoint(x: 10, y: 10)]))
+        XCTAssertFalse(detector.isScribble([CGPoint(x: 0, y: 0), CGPoint(x: 10, y: 10)], duration: 0.2))
     }
 
     func testEmptyInputIsSafe() {
-        XCTAssertFalse(detector.isScribble([]))
+        XCTAssertFalse(detector.isScribble([], duration: 0.2))
+    }
+
+    // MARK: - Speed
+
+    /// The change that matters: the same shape, drawn slowly, is deliberate work.
+    func testTheSameShapeDrawnSlowlyIsNotAScribble() {
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35))
+        XCTAssertFalse(detector.isScribble(scribble(), duration: 2.5),
+                       "a shape drawn carefully is drawing, not deleting")
+    }
+
+    func testAStrokeWithNoTimingIsRefused() {
+        XCTAssertFalse(detector.isScribble(scribble(), duration: nil),
+                       "without timing, deleting would be a guess")
+    }
+
+    func testZeroDurationIsRefused() {
+        XCTAssertFalse(detector.isScribble(scribble(), duration: 0))
+    }
+
+    // MARK: - Shape
+
+    func testATallNarrowShapeIsNotAScribble() {
+        // Dense and reversing, but square-ish rather than a band: a tangle, not a crossing out.
+        var points: [CGPoint] = []
+        for pass in 0..<8 {
+            for step in stride(from: 0.0, through: 1.0, by: 0.1) {
+                let t = pass % 2 == 0 ? step : 1 - step
+                points.append(CGPoint(x: 60 * t, y: 60 * Double(pass) / 8))
+            }
+        }
+        XCTAssertFalse(detector.isScribble(points, duration: 0.3))
     }
 
     // MARK: - What gets deleted
@@ -114,6 +146,6 @@ final class ScribbleDetectorTests: XCTestCase {
 
     func testSensitivityIsAdjustable() {
         let strict = ScribbleDetector(minimumReversals: 40, minimumDensity: 20, minimumLength: 60)
-        XCTAssertFalse(strict.isScribble(scribble()), "a stricter detector should refuse more")
+        XCTAssertFalse(strict.isScribble(scribble(), duration: 0.3), "a stricter detector should refuse more")
     }
 }

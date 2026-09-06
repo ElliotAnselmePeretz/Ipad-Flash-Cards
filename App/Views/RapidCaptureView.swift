@@ -125,6 +125,7 @@ struct RapidCaptureView: View {
                         data: currentInk,
                         controller: controller,
                         tool: tool, color: inkColor, width: inkWidth,
+                        onFlip: { withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { flipSide() } }
                     )
                     .id(canvasGeneration)
 
@@ -134,9 +135,7 @@ struct RapidCaptureView: View {
                                 .font(.system(size: 30, weight: .light))
                             Text(step == .question ? "Write the question" : "Write the answer")
                                 .font(Theme.title(19))
-                            Text(step == .question
-                                 ? "Then tap Write answer below"
-                                 : "Then tap Save card below")
+                            Text("Tap with a finger to flip sides")
                                 .font(Theme.body(13))
                                 .opacity(0.7)
                         }

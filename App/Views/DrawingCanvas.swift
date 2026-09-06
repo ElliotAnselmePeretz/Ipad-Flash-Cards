@@ -37,13 +37,8 @@ struct DrawingCanvas: UIViewRepresentable {
     /// gestures for navigation, which is what lets a tap flip the card.
     var pencilOnly: Bool = true
 
-    /// Deliberately absent: there is no tap-to-flip while writing.
-    ///
-    /// The card editor and rapid capture are used with a hand resting on the page, and a
-    /// resting palm produces a direct touch that looks like a tap. Filtering by contact
-    /// size failed in both directions — tight enough to reject a palm also rejected real
-    /// fingertips. Those screens use explicit controls instead, and tapping to flip lives
-    /// on the study screen, where nothing is resting on the glass.
+    /// Tap with a finger to flip between the two sides of the card.
+    var onFlip: (() -> Void)?
 
     /// Scratch a stroke out to delete it, the way you would on paper. Detection can
     /// misfire on unusual handwriting, so it is switchable from the tool bar.
@@ -69,6 +64,16 @@ struct DrawingCanvas: UIViewRepresentable {
             canvas.drawing = drawing
         }
 
+        if onFlip != nil {
+            let tap = UITapGestureRecognizer(target: context.coordinator,
+                                             action: #selector(Coordinator.handleFlip))
+            tap.numberOfTapsRequired = 1
+            tap.numberOfTouchesRequired = 1
+            tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+            tap.delegate = context.coordinator
+            canvas.addGestureRecognizer(tap)
+        }
+
         context.coordinator.apply(tool: tool, color: color, width: width, to: canvas)
         controller?.canvas = canvas
         return canvas
@@ -91,11 +96,52 @@ struct DrawingCanvas: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, PKCanvasViewDelegate {
+    final class Coordinator: NSObject, PKCanvasViewDelegate, UIGestureRecognizerDelegate {
         var parent: DrawingCanvas
         var isEditing = false
+        /// When the Pencil last touched the page. Contact size alone cannot separate a
+        /// resting palm from a fingertip, but timing can: palms land while you are
+        /// writing, and a deliberate tap comes after you have stopped and lifted the pen.
+        private var lastPencilActivity = Date.distantPast
+        /// How long after writing a tap is ignored for.
+        private static let writingCooldown: TimeInterval = 1.2
+        private static let maximumFingertipRadius: CGFloat = 50
 
         init(_ parent: DrawingCanvas) { self.parent = parent }
+
+        @objc func handleFlip() { parent.onFlip?() }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldReceive touch: UITouch) -> Bool {
+            // The Pencil writes; it never navigates.
+            guard touch.type == .direct else { return false }
+
+            // Not while the pen is down, and not in the moment just after — that is when
+            // a hand is on the page.
+            guard !isEditing else { return false }
+            guard Date().timeIntervalSince(lastPencilActivity) > Self.writingCooldown else {
+                return false
+            }
+
+            // Broad contacts are hands.
+            guard touch.majorRadius <= Self.maximumFingertipRadius else { return false }
+
+            return true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldReceive event: UIEvent) -> Bool {
+            // A hand puts several contacts down at once; a tap puts one.
+            let active = event.allTouches?.filter {
+                $0.phase != .ended && $0.phase != .cancelled
+            }.count ?? 1
+            return active <= 1
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            false
+        }
 
         func apply(tool: InkTool, color: InkColor, width: InkWidth, to canvas: PKCanvasView) {
             guard let inkType = tool.inkType else {
@@ -113,8 +159,15 @@ struct DrawingCanvas: UIViewRepresentable {
                                        width: width.points(for: tool))
         }
 
-        func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) { isEditing = true }
-        func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) { isEditing = false }
+        func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+            isEditing = true
+            lastPencilActivity = Date()
+        }
+
+        func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+            isEditing = false
+            lastPencilActivity = Date()
+        }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             if parent.scribbleToErase, applyScribbleErase(on: canvasView) { return }
@@ -133,7 +186,7 @@ struct DrawingCanvas: UIViewRepresentable {
             guard strokes.count >= 2, let last = strokes.last else { return false }
 
             let scribblePoints = points(of: last)
-            guard detector.isScribble(scribblePoints) else { return false }
+            guard detector.isScribble(scribblePoints, duration: duration(of: last)) else { return false }
 
             let others = strokes.dropLast().map(points(of:))
             let crossed = Set(detector.strokesCrossed(by: scribblePoints, candidates: Array(others)))
@@ -153,6 +206,15 @@ struct DrawingCanvas: UIViewRepresentable {
 
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             return true
+        }
+
+        /// How long the stroke took to draw. PencilKit records a time offset per point,
+        /// which is what makes speed available at all.
+        private func duration(of stroke: PKStroke) -> TimeInterval? {
+            let path = stroke.path
+            guard path.count >= 2 else { return nil }
+            let elapsed = path[path.count - 1].timeOffset - path[0].timeOffset
+            return elapsed > 0 ? elapsed : nil
         }
 
         /// A stroke's path in canvas coordinates, sampled evenly.
