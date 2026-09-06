@@ -108,14 +108,17 @@ struct StudyView: View {
             cardFace(session: session, card: card)
                 .frame(maxWidth: 720)
                 .padding(.horizontal, 24)
+                // A real flip: the card turns over to show its other side.
+                .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+                .animation(.spring(response: 0.5, dampingFraction: 0.78), value: flipped)
+                // The tap layer sits outside the 3D transform on purpose: hit-testing
+                // through a rotation3DEffect is unreliable, and putting it inside meant
+                // the gesture was swallowed by the animation it was supposed to start.
                 .onFingertipTap {
                     if session.stage == .question { reveal(session) }
                 }
                 .accessibilityAddTraits(session.stage == .question ? .isButton : [])
                 .accessibilityHint(session.stage == .question ? "Tap to show the answer" : "")
-                // A real flip: the card turns over to show its other side.
-                .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-                .animation(.spring(response: 0.5, dampingFraction: 0.78), value: flipped)
 
             Spacer(minLength: 8)
 

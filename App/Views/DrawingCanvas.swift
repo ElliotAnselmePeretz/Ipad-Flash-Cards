@@ -108,9 +108,14 @@ struct DrawingCanvas: UIViewRepresentable {
                 canvas.tool = PKEraserTool(.bitmap)
                 return
             }
-            let style = canvas.traitCollection.userInterfaceStyle
+            // Always hand PencilKit the light-mode colour.
+            //
+            // PencilKit adapts ink for dark mode itself: it treats the colour it is given
+            // as the one for light backgrounds and inverts it on dark. Passing the dark
+            // variant meant the near-white ink was inverted a second time and came out
+            // black — invisible on a dark page. One inversion, not two.
             canvas.tool = PKInkingTool(inkType,
-                                       color: color.uiColor(for: style),
+                                       color: color.uiColor(for: .light),
                                        width: width.points(for: tool))
         }
 
@@ -120,7 +125,7 @@ struct DrawingCanvas: UIViewRepresentable {
 
         /// A fingertip contact patch is small; a palm or forearm is not. iPadOS reports
         /// the contact radius, so the two can be told apart before the tap ever fires.
-        private static let maximumFingertipRadius: CGFloat = 30
+        private static let maximumFingertipRadius: CGFloat = 55
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldReceive touch: UITouch) -> Bool {
@@ -230,8 +235,9 @@ struct DrawingThumbnail: View {
         .frame(height: height)
     }
 
-    /// PencilKit renders ink for a trait environment, so a drawing made in light mode has
-    /// to be rasterised with the current style or dark-mode handwriting comes out invisible.
+    /// Rasterised with the current style, so PencilKit performs the same single dark-mode
+    /// adaptation here that the live canvas does. Ink stored as black therefore shows white
+    /// on a dark page, and the thumbnail matches what was written.
     private func render(_ drawing: PKDrawing, in bounds: CGRect) -> UIImage {
         let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
         var image = UIImage()

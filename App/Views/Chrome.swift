@@ -392,7 +392,11 @@ struct HeaderGlyph: View {
 /// is not, so the two can be told apart before the tap is delivered.
 struct PalmSafeTapArea: UIViewRepresentable {
     /// Contacts wider than this are hands, not fingers.
-    static let maximumFingertipRadius: CGFloat = 30
+    ///
+    /// Measured in points. A fingertip on an iPad commonly reports 20–40 depending on how
+    /// flat the finger lands, while a resting palm or forearm is far larger. The first
+    /// value tried here was 30, which rejected ordinary taps along with palms.
+    static let maximumFingertipRadius: CGFloat = 55
 
     let onTap: () -> Void
 
