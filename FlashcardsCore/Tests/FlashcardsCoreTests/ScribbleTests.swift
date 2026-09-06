@@ -19,6 +19,11 @@ final class ScribbleDetectorTests: XCTestCase {
         return points
     }
 
+    /// Ink already on the page, lying under the scribble's path.
+    private func word(y: CGFloat = 108) -> [CGPoint] {
+        (0...60).map { CGPoint(x: CGFloat($0) * 2, y: y) }
+    }
+
     private func line(from: CGPoint, to: CGPoint, steps: Int = 20) -> [CGPoint] {
         (0...steps).map { i in
             let t = CGFloat(i) / CGFloat(steps)
@@ -29,7 +34,7 @@ final class ScribbleDetectorTests: XCTestCase {
     // MARK: - Detection
 
     func testADenseZigZagIsAScribble() {
-        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35))
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35, over: [word()]))
     }
 
     func testAStraightLineIsNot() {
@@ -86,18 +91,18 @@ final class ScribbleDetectorTests: XCTestCase {
 
     /// The change that matters: the same shape, drawn slowly, is deliberate work.
     func testTheSameShapeDrawnSlowlyIsNotAScribble() {
-        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35))
-        XCTAssertFalse(detector.isScribble(scribble(), duration: 2.5),
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35, over: [word()]))
+        XCTAssertFalse(detector.isScribble(scribble(), duration: 2.5, over: [word()]),
                        "a shape drawn carefully is drawing, not deleting")
     }
 
     func testAStrokeWithNoTimingIsRefused() {
-        XCTAssertFalse(detector.isScribble(scribble(), duration: nil),
+        XCTAssertFalse(detector.isScribble(scribble(), duration: nil, over: [word()]),
                        "without timing, deleting would be a guess")
     }
 
     func testZeroDurationIsRefused() {
-        XCTAssertFalse(detector.isScribble(scribble(), duration: 0))
+        XCTAssertFalse(detector.isScribble(scribble(), duration: 0, over: [word()]))
     }
 
     // MARK: - Shape
@@ -114,26 +119,71 @@ final class ScribbleDetectorTests: XCTestCase {
         XCTAssertFalse(detector.isScribble(points, duration: 0.3))
     }
 
+    // MARK: - Overlap
+
+    /// The signal that actually means "delete this": going back and forth over ink that
+    /// is already there. Writing lands on blank paper.
+    func testAScribbleOverNothingIsNotADeletion() {
+        XCTAssertFalse(detector.isScribble(scribble(), duration: 0.35, over: []),
+                       "there is nothing to cross out on blank paper")
+    }
+
+    func testAScribbleAwayFromExistingInkIsNotADeletion() {
+        let elsewhere = [word(y: 900)]
+        XCTAssertFalse(detector.isScribble(scribble(), duration: 0.35, over: elsewhere))
+    }
+
+    func testAScribbleOverInkIsADeletion() {
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35, over: [word()]))
+    }
+
+    func testMostOfAScratchOutLiesOnTopOfTheWord() {
+        XCTAssertGreaterThan(detector.overlap(of: scribble(passes: 6), over: [word()]), 0.55)
+    }
+
+    func testAStrokeOnBlankPaperOverlapsNothing() {
+        let elsewhere = line(from: CGPoint(x: 0, y: 900), to: CGPoint(x: 200, y: 900))
+        XCTAssertEqual(detector.overlap(of: elsewhere, over: [word()]), 0)
+    }
+
+    func testASingleStrokeThroughAWordIsNotEnough() {
+        // Crossing out means going back over something, not passing through once.
+        let throughOnce = line(from: CGPoint(x: 0, y: 108), to: CGPoint(x: 120, y: 108), steps: 40)
+        XCTAssertFalse(detector.isScribble(throughOnce, duration: 0.2, over: [word()]),
+                       "one pass is a strikethrough, not a scratch-out")
+    }
+
+    func testOverlapIsZeroWithNothingOnThePage() {
+        XCTAssertEqual(detector.overlap(of: scribble(), over: []), 0)
+    }
+
+    /// Because overlap carries the evidence, fewer passes are needed than before.
+    func testAShortScratchOverAWordStillCounts() {
+        XCTAssertTrue(detector.isScribble(scribble(passes: 5), duration: 0.3, over: [word()]),
+                      "a few quick passes over a word should be enough")
+    }
+
     // MARK: - Measurement
 
     func testMeasurementAgreesWithTheDecision() {
-        let fast = detector.measure(scribble(), duration: 0.35)
+        let fast = detector.measure(scribble(), duration: 0.35, over: [word()])
         XCTAssertTrue(fast.isScribble)
         XCTAssertNil(fast.rejectedBy)
 
-        let slow = detector.measure(scribble(), duration: 2.5)
+        let slow = detector.measure(scribble(), duration: 2.5, over: [word()])
         XCTAssertFalse(slow.isScribble)
         XCTAssertEqual(slow.rejectedBy, "speed")
     }
 
     func testMeasurementNamesTheRuleThatRefused() {
-        let straight = detector.measure(line(from: .zero, to: CGPoint(x: 400, y: 0)), duration: 0.3)
+        let straight = detector.measure(line(from: .zero, to: CGPoint(x: 400, y: 0)),
+                                        duration: 0.3, over: [word()])
         XCTAssertFalse(straight.isScribble)
         XCTAssertEqual(straight.rejectedBy, "density")
     }
 
     func testMeasurementReportsRealNumbers() {
-        let m = detector.measure(scribble(), duration: 0.5)
+        let m = detector.measure(scribble(), duration: 0.5, over: [word()])
         XCTAssertGreaterThan(m.length, 0)
         XCTAssertGreaterThan(m.speed, 0)
         XCTAssertGreaterThan(m.reversals, 0)
@@ -172,6 +222,6 @@ final class ScribbleDetectorTests: XCTestCase {
 
     func testSensitivityIsAdjustable() {
         let strict = ScribbleDetector(minimumReversals: 40, minimumDensity: 20, minimumLength: 60)
-        XCTAssertFalse(strict.isScribble(scribble(), duration: 0.3), "a stricter detector should refuse more")
+        XCTAssertFalse(strict.isScribble(scribble(), duration: 0.3, over: [word()]), "a stricter detector should refuse more")
     }
 }

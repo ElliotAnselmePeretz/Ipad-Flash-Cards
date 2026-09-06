@@ -23,15 +23,52 @@ public struct ScribbleDetector: Sendable {
     /// A scratch-out is roughly a band: wide along one axis, shallow across it. Writing
     /// fills its box more evenly.
     public var minimumElongation: CGFloat
+    /// How much of the stroke must lie on top of ink that is already there, 0...1.
+    ///
+    /// This is the signal that actually means "delete this". Shape and speed describe the
+    /// stroke in isolation, but a scribble is defined by what it is *on top of*: you go
+    /// back and forth across something already on the page, while writing lands on blank
+    /// paper. Requiring real overlap means far fewer passes are needed to be sure.
+    public var minimumOverlap: CGFloat
 
-    public init(minimumReversals: Int = 5, minimumDensity: CGFloat = 2.6,
-                minimumLength: CGFloat = 80, minimumSpeed: CGFloat = 420,
-                minimumElongation: CGFloat = 1.3) {
+    public init(minimumReversals: Int = 3, minimumDensity: CGFloat = 1.8,
+                minimumLength: CGFloat = 60, minimumSpeed: CGFloat = 300,
+                minimumElongation: CGFloat = 1.2, minimumOverlap: CGFloat = 0.55) {
         self.minimumReversals = minimumReversals
         self.minimumDensity = minimumDensity
         self.minimumLength = minimumLength
         self.minimumSpeed = minimumSpeed
         self.minimumElongation = minimumElongation
+        self.minimumOverlap = minimumOverlap
+    }
+
+    /// The fraction of `stroke` lying on top of ink already on the page, 0...1.
+    ///
+    /// Counting "entries" onto existing ink was tried first and was wrong: a real
+    /// scratch-out never leaves the word it is crossing out, so it registered as a single
+    /// entry. What distinguishes it is that nearly all of it is on top of something.
+    public func overlap(of stroke: [CGPoint], over candidates: [[CGPoint]],
+                        tolerance: CGFloat = 16) -> CGFloat {
+        guard !candidates.isEmpty, !stroke.isEmpty else { return 0 }
+
+        // Only consider strokes near the scribble at all, so this stays cheap.
+        let box = boundingBox(stroke).insetBy(dx: -tolerance, dy: -tolerance)
+        let nearby = candidates.filter { boundingBox($0).intersects(box) }
+        guard !nearby.isEmpty else { return 0 }
+
+        var covered = 0
+        for point in stroke {
+            var isOver = false
+            for candidate in nearby {
+                for other in candidate where hypot(point.x - other.x, point.y - other.y) <= tolerance {
+                    isOver = true
+                    break
+                }
+                if isOver { break }
+            }
+            if isOver { covered += 1 }
+        }
+        return CGFloat(covered) / CGFloat(stroke.count)
     }
 
     /// `duration` is how long the stroke took. Without it, speed cannot be judged and the
@@ -48,12 +85,15 @@ public struct ScribbleDetector: Sendable {
         public var reversals: Int
         public var duration: TimeInterval
         public var speed: CGFloat
+        /// Fraction of the stroke lying on top of ink already on the page.
+        public var overlap: CGFloat
         public var isScribble: Bool
         /// The first rule that refused it, for reading back later.
         public var rejectedBy: String?
     }
 
-    public func measure(_ points: [CGPoint], duration: TimeInterval?) -> Measurement {
+    public func measure(_ points: [CGPoint], duration: TimeInterval?,
+                        over candidates: [[CGPoint]] = []) -> Measurement {
         let length = pathLength(points)
         let box = boundingBox(points)
         let diagonal = sqrt(box.width * box.width + box.height * box.height)
@@ -65,6 +105,8 @@ public struct ScribbleDetector: Sendable {
         let seconds = duration ?? 0
         let speed = seconds > 0 ? length / CGFloat(seconds) : 0
 
+        let overlapRatio = overlap(of: points, over: candidates)
+
         var rejected: String?
         if points.count < 8 { rejected = "points" }
         else if length < minimumLength { rejected = "length" }
@@ -74,34 +116,18 @@ public struct ScribbleDetector: Sendable {
         else if reversalCount < minimumReversals { rejected = "reversals" }
         else if seconds <= 0 { rejected = "no-timing" }
         else if speed < minimumSpeed { rejected = "speed" }
+        else if overlapRatio < minimumOverlap { rejected = "overlap" }
 
         return Measurement(
             pointCount: points.count, length: length, diagonal: diagonal, density: density,
             elongation: elongation, reversals: reversalCount, duration: seconds, speed: speed,
-            isScribble: rejected == nil, rejectedBy: rejected
+            overlap: overlapRatio, isScribble: rejected == nil, rejectedBy: rejected
         )
     }
 
-    public func isScribble(_ points: [CGPoint], duration: TimeInterval? = nil) -> Bool {
-        guard points.count >= 8 else { return false }
-
-        let length = pathLength(points)
-        guard length >= minimumLength else { return false }
-
-        let box = boundingBox(points)
-        let diagonal = sqrt(box.width * box.width + box.height * box.height)
-        guard diagonal > 0 else { return false }
-        guard length / diagonal >= minimumDensity else { return false }
-
-        // Long and thin, the shape of scratching something out.
-        let long = max(box.width, box.height)
-        let short = max(min(box.width, box.height), 1)
-        guard long / short >= minimumElongation else { return false }
-
-        guard reversals(points) >= minimumReversals else { return false }
-
-        guard let duration, duration > 0 else { return false }
-        return length / CGFloat(duration) >= minimumSpeed
+    public func isScribble(_ points: [CGPoint], duration: TimeInterval? = nil,
+                           over candidates: [[CGPoint]] = []) -> Bool {
+        measure(points, duration: duration, over: candidates).isScribble
     }
 
     /// Direction changes along whichever axis the stroke travels furthest on.

@@ -20,7 +20,7 @@ enum ScribbleLog {
         let line = String(
             format: "%@  len=%.0f diag=%.0f density=%.2f elong=%.2f rev=%d dur=%.2fs speed=%.0f  %@",
             ISO8601DateFormatter().string(from: Date()),
-            m.length, m.diagonal, m.density, m.elongation, m.reversals, m.duration, m.speed,
+            m.length, m.density, m.elongation, m.reversals, m.duration, m.speed, m.overlap,
             m.isScribble ? "ERASED" : "kept (\(m.rejectedBy ?? "?"))"
         )
         lines.append(line)

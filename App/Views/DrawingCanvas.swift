@@ -186,11 +186,16 @@ struct DrawingCanvas: UIViewRepresentable {
             guard strokes.count >= 2, let last = strokes.last else { return false }
 
             let scribblePoints = points(of: last)
-            let measurement = detector.measure(scribblePoints, duration: duration(of: last))
+            let others = strokes.dropLast().map(points(of:))
+
+            // Overlap with what is already on the page is the evidence that this is a
+            // deletion rather than a drawing, so the existing strokes go into the decision.
+            let measurement = detector.measure(scribblePoints,
+                                               duration: duration(of: last),
+                                               over: Array(others))
             ScribbleLog.record(measurement)
             guard measurement.isScribble else { return false }
 
-            let others = strokes.dropLast().map(points(of:))
             let crossed = Set(detector.strokesCrossed(by: scribblePoints, candidates: Array(others)))
             guard !crossed.isEmpty else { return false }
 
