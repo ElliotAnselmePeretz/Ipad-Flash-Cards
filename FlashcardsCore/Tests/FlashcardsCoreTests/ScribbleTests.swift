@@ -114,6 +114,32 @@ final class ScribbleDetectorTests: XCTestCase {
         XCTAssertFalse(detector.isScribble(points, duration: 0.3))
     }
 
+    // MARK: - Measurement
+
+    func testMeasurementAgreesWithTheDecision() {
+        let fast = detector.measure(scribble(), duration: 0.35)
+        XCTAssertTrue(fast.isScribble)
+        XCTAssertNil(fast.rejectedBy)
+
+        let slow = detector.measure(scribble(), duration: 2.5)
+        XCTAssertFalse(slow.isScribble)
+        XCTAssertEqual(slow.rejectedBy, "speed")
+    }
+
+    func testMeasurementNamesTheRuleThatRefused() {
+        let straight = detector.measure(line(from: .zero, to: CGPoint(x: 400, y: 0)), duration: 0.3)
+        XCTAssertFalse(straight.isScribble)
+        XCTAssertEqual(straight.rejectedBy, "density")
+    }
+
+    func testMeasurementReportsRealNumbers() {
+        let m = detector.measure(scribble(), duration: 0.5)
+        XCTAssertGreaterThan(m.length, 0)
+        XCTAssertGreaterThan(m.speed, 0)
+        XCTAssertGreaterThan(m.reversals, 0)
+        XCTAssertEqual(m.duration, 0.5, accuracy: 0.0001)
+    }
+
     // MARK: - What gets deleted
 
     func testStrokesUnderTheScribbleAreCrossed() {

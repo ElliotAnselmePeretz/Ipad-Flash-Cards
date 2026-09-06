@@ -186,7 +186,9 @@ struct DrawingCanvas: UIViewRepresentable {
             guard strokes.count >= 2, let last = strokes.last else { return false }
 
             let scribblePoints = points(of: last)
-            guard detector.isScribble(scribblePoints, duration: duration(of: last)) else { return false }
+            let measurement = detector.measure(scribblePoints, duration: duration(of: last))
+            ScribbleLog.record(measurement)
+            guard measurement.isScribble else { return false }
 
             let others = strokes.dropLast().map(points(of:))
             let crossed = Set(detector.strokesCrossed(by: scribblePoints, candidates: Array(others)))

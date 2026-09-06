@@ -24,9 +24,9 @@ public struct ScribbleDetector: Sendable {
     /// fills its box more evenly.
     public var minimumElongation: CGFloat
 
-    public init(minimumReversals: Int = 7, minimumDensity: CGFloat = 3.4,
-                minimumLength: CGFloat = 110, minimumSpeed: CGFloat = 900,
-                minimumElongation: CGFloat = 1.8) {
+    public init(minimumReversals: Int = 5, minimumDensity: CGFloat = 2.6,
+                minimumLength: CGFloat = 80, minimumSpeed: CGFloat = 420,
+                minimumElongation: CGFloat = 1.3) {
         self.minimumReversals = minimumReversals
         self.minimumDensity = minimumDensity
         self.minimumLength = minimumLength
@@ -36,6 +36,52 @@ public struct ScribbleDetector: Sendable {
 
     /// `duration` is how long the stroke took. Without it, speed cannot be judged and the
     /// stroke is refused: deleting someone's work on a guess is worse than doing nothing.
+    /// Everything measured about a stroke, and whether it qualified. Returned so the app
+    /// can record real strokes and the thresholds can be set from measurements rather
+    /// than from guesses — the first three attempts at these numbers were guesses.
+    public struct Measurement: Sendable, Equatable {
+        public var pointCount: Int
+        public var length: CGFloat
+        public var diagonal: CGFloat
+        public var density: CGFloat
+        public var elongation: CGFloat
+        public var reversals: Int
+        public var duration: TimeInterval
+        public var speed: CGFloat
+        public var isScribble: Bool
+        /// The first rule that refused it, for reading back later.
+        public var rejectedBy: String?
+    }
+
+    public func measure(_ points: [CGPoint], duration: TimeInterval?) -> Measurement {
+        let length = pathLength(points)
+        let box = boundingBox(points)
+        let diagonal = sqrt(box.width * box.width + box.height * box.height)
+        let density = diagonal > 0 ? length / diagonal : 0
+        let long = max(box.width, box.height)
+        let short = max(min(box.width, box.height), 1)
+        let elongation = long / short
+        let reversalCount = reversals(points)
+        let seconds = duration ?? 0
+        let speed = seconds > 0 ? length / CGFloat(seconds) : 0
+
+        var rejected: String?
+        if points.count < 8 { rejected = "points" }
+        else if length < minimumLength { rejected = "length" }
+        else if diagonal <= 0 { rejected = "diagonal" }
+        else if density < minimumDensity { rejected = "density" }
+        else if elongation < minimumElongation { rejected = "elongation" }
+        else if reversalCount < minimumReversals { rejected = "reversals" }
+        else if seconds <= 0 { rejected = "no-timing" }
+        else if speed < minimumSpeed { rejected = "speed" }
+
+        return Measurement(
+            pointCount: points.count, length: length, diagonal: diagonal, density: density,
+            elongation: elongation, reversals: reversalCount, duration: seconds, speed: speed,
+            isScribble: rejected == nil, rejectedBy: rejected
+        )
+    }
+
     public func isScribble(_ points: [CGPoint], duration: TimeInterval? = nil) -> Bool {
         guard points.count >= 8 else { return false }
 
