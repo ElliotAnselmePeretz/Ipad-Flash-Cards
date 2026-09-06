@@ -430,7 +430,30 @@ struct PalmSafeTapArea: UIViewRepresentable {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldReceive touch: UITouch) -> Bool {
-            touch.type == .direct && touch.majorRadius <= PalmSafeTapArea.maximumFingertipRadius
+            // The Pencil does not navigate.
+            guard touch.type == .direct else { return false }
+
+            // Broad contacts are hands, not fingertips.
+            guard touch.majorRadius <= PalmSafeTapArea.maximumFingertipRadius else { return false }
+
+            // A hand on the glass puts several contacts down at once; a deliberate tap is
+            // a single one. This is the signal contact size alone could not provide.
+            let live = touch.window?.windowScene?.windows
+                .compactMap { $0.gestureRecognizers }
+                .flatMap { $0 }
+                .reduce(0) { $0 + $1.numberOfTouches } ?? 1
+            if live > 1 { return false }
+
+            return true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldReceive event: UIEvent) -> Bool {
+            // Reject the event outright when more than one contact is live.
+            let active = event.allTouches?.filter {
+                $0.phase != .ended && $0.phase != .cancelled
+            }.count ?? 1
+            return active <= 1
         }
     }
 }
