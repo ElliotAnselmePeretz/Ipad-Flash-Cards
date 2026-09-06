@@ -58,6 +58,24 @@ struct DeckListView: View {
         }
     }
 
+    private func cycleAppearance() {
+        let all = Appearance.allCases
+        let next = (all.firstIndex(of: appearance).map { $0 + 1 } ?? 0) % all.count
+        withAnimation { appearance = all[next] }
+    }
+
+    private func addDeck() {
+        let name = newDeckName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            let deck = StoredDeck(name: name, profile: profile)
+            context.insert(deck)
+            try? context.save()
+            newDeckName = ""
+            isAddingDeck = false
+        }
+    }
+
     private func addSampleDeck() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
             SampleDeck.add(to: profile, in: context)
@@ -180,7 +198,22 @@ struct DeckListView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            VStack(spacing: 0) {
+                AppHeader(title: "Decks") {
+                    HeaderButton(symbol: "circle.lefthalf.filled", label: "Appearance") {
+                        cycleAppearance()
+                    }
+                    NavigationLink {
+                        OverallProgressView(profile: profile)
+                    } label: {
+                        HeaderGlyph(symbol: "chart.line.uptrend.xyaxis", label: "Progress")
+                    }
+                    HeaderButton(symbol: "plus", label: "New deck", tint: Theme.accent(scheme)) {
+                        isAddingDeck = true
+                    }
+                }
+
+                ScrollView {
                 LazyVStack(spacing: 14) {
                     NavigationLink {
                         OverallProgressView(profile: profile)
@@ -238,69 +271,38 @@ struct DeckListView: View {
                                     .delay(Double(index) * 0.04), value: decks.count)
                     }
                 }
-                .padding(20)
+                    .padding(20)
+                }
+                .background(Theme.page(scheme))
             }
             .background(Theme.page(scheme))
+            .navigationBarHidden(true)
             .navigationDestination(item: $writingInto) { deck in
                 RapidCaptureView(deck: deck)
             }
-            .navigationTitle("Decks")
+            .overlay {
+                if isAddingDeck {
+                    AppDialog(
+                        title: "New deck",
+                        message: "What is it a deck of?",
+                        confirmTitle: "Create",
+                        isConfirmEnabled: !newDeckName.trimmingCharacters(in: .whitespaces).isEmpty,
+                        onConfirm: { addDeck() },
+                        onCancel: { withAnimation { isAddingDeck = false; newDeckName = "" } }
+                    ) {
+                        AppTextField(placeholder: "Derivatives, Spanish verbs…", text: $newDeckName)
+                    }
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isAddingDeck)
             .overlay {
                 if decks.isEmpty {
                     EmptyDecksView(onAddSample: addSampleDeck)
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        OverallProgressView(profile: profile)
-                    } label: {
-                        Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
-                    }
-                    .accessibilityIdentifier("decks.progress")
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Picker("Appearance", selection: $appearance) {
-                            ForEach(Appearance.allCases) { option in
-                                Text(option.label).tag(option)
-                            }
-                        }
-                        Divider()
-                        NavigationLink {
-                            StudyPlanView(profile: profile)
-                        } label: {
-                            Label("Study plan", systemImage: "calendar")
-                        }
-                        NavigationLink {
-                            BackupView(profile: profile)
-                        } label: {
-                            Label("Backup", systemImage: "externaldrive")
-                        }
-                    } label: {
-                        Label("Appearance", systemImage: "circle.lefthalf.filled")
-                    }
-                    .accessibilityIdentifier("decks.appearance")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("New deck", systemImage: "plus") { isAddingDeck = true }
-                }
-            }
-            .alert("New deck", isPresented: $isAddingDeck) {
-                TextField("Name", text: $newDeckName)
-                Button("Cancel", role: .cancel) { newDeckName = "" }
-                Button("Create") { createDeck() }
-            }
         }
     }
 
-    private func createDeck() {
-        let trimmed = newDeckName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        context.insert(StoredDeck(name: trimmed, profile: profile))
-        try? context.save()
-        newDeckName = ""
-    }
 }
 
 private struct DeckRow: View {

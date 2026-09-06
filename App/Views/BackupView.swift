@@ -10,6 +10,7 @@ struct BackupView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
 
     @State private var exportURL: URL?
     @State private var isImporting = false
@@ -138,9 +139,12 @@ struct BackupView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Theme.page(scheme))
+        .safeAreaInset(edge: .top) {
+            AppHeader(title: "Backup", onBack: { dismiss() })
+                .background(Theme.page(scheme))
+        }
+        .navigationBarHidden(true)
         .onAppear { automatic = AutoBackup.existing() }
-        .navigationTitle("Backup")
-        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $exportURL) { url in
             ShareSheet(url: url)
         }

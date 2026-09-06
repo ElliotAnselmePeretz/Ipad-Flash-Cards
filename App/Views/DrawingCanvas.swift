@@ -47,7 +47,7 @@ struct DrawingCanvas: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> PKCanvasView {
-        let canvas = PKCanvasView()
+        let canvas = MenulessCanvasView()
         canvas.delegate = context.coordinator
         canvas.drawingPolicy = effectivePencilOnly ? .pencilOnly : .anyInput
         canvas.backgroundColor = .clear
@@ -148,6 +148,29 @@ struct DrawingCanvas: UIViewRepresentable {
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             let encoded = canvasView.drawing.dataRepresentation()
             if parent.data != encoded { parent.data = encoded }
+        }
+    }
+}
+
+/// A canvas that never offers the system edit menu.
+///
+/// Resting the Pencil or a finger for a moment brings up iPadOS's Copy / Paste bubble over
+/// the drawing. It is never useful here — there is nothing to paste a drawing into — and it
+/// interrupts writing, which is the one thing this view exists for.
+private final class MenulessCanvasView: PKCanvasView {
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        false
+    }
+
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        // Leave the menu empty rather than calling super, so nothing is offered at all.
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // PencilKit installs its own edit-menu interaction; remove it once it exists.
+        for interaction in interactions where interaction is UIEditMenuInteraction {
+            removeInteraction(interaction)
         }
     }
 }

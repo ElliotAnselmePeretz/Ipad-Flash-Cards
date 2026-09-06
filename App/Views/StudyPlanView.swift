@@ -8,6 +8,7 @@ struct StudyPlanView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
     @Environment(StudyReminders.self) private var reminders
 
     @AppStorage("studyPlanSettings") private var settingsData = Data()
@@ -22,27 +23,29 @@ struct StudyPlanView: View {
     private var needingAttention: [DeckWorkload] { planner.decksNeedingAttention(workloads) }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if settings.isEnabled {
-                    todayCard
-                    goalsCard
-                    timesCard
-                    decksCard
-                    lengthCard
-                    nudgeCard
-                    turnOffCard
-                } else {
-                    createCard
+        VStack(spacing: 0) {
+            AppHeader(title: "Study plan", onBack: { dismiss() })
+            ScrollView {
+                VStack(spacing: 16) {
+                    if settings.isEnabled {
+                        todayCard
+                        goalsCard
+                        timesCard
+                        decksCard
+                        lengthCard
+                        nudgeCard
+                        turnOffCard
+                    } else {
+                        createCard
+                    }
                 }
+                .padding(20)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity)
         }
         .background(Theme.page(scheme))
-        .navigationTitle("Study plan")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
         .task {
             load()
             await reminders.refreshAuthorization()
@@ -346,13 +349,16 @@ struct StudyPlanView: View {
                 Text("How long")
                     .font(Theme.display(20))
                     .foregroundStyle(Theme.ink(scheme))
-                Stepper(value: Binding(
-                    get: { settings.maximumSessionMinutes },
-                    set: { settings.maximumSessionMinutes = $0 }
-                ), in: 5...60, step: 5) {
-                    Text("At most \(settings.maximumSessionMinutes) minutes a sitting")
-                        .font(Theme.body(15))
-                }
+                AppStepper(
+                    title: "Sitting length",
+                    caption: "The longest one sitting should run",
+                    value: Binding(
+                        get: { settings.maximumSessionMinutes },
+                        set: { settings.maximumSessionMinutes = $0 }
+                    ),
+                    range: 5...60, step: 5,
+                    format: { "\($0) min" }
+                )
                 Text("Anything that will not fit rolls over rather than making one long session.")
                     .font(Theme.body(13))
                     .foregroundStyle(Theme.softInk(scheme))
@@ -367,13 +373,15 @@ struct StudyPlanView: View {
                     .font(Theme.display(20))
                     .foregroundStyle(Theme.ink(scheme))
 
-                Stepper(value: Binding(
-                    get: { settings.nudgeAfterDays },
-                    set: { settings.nudgeAfterDays = $0 }
-                ), in: 1...30) {
-                    Text("Say something after \(settings.nudgeAfterDays) quiet ^[day](inflect: true)")
-                        .font(Theme.body(15))
-                }
+                AppStepper(
+                    title: "Quiet days before a nudge",
+                    value: Binding(
+                        get: { settings.nudgeAfterDays },
+                        set: { settings.nudgeAfterDays = $0 }
+                    ),
+                    range: 1...30,
+                    format: { $0 == 1 ? "1 day" : "\($0) days" }
+                )
 
                 if needingAttention.isEmpty {
                     Text("Nothing is slipping right now.")
@@ -456,16 +464,24 @@ private struct GoalEditor: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    private var canSave: Bool {
+        !goal.name.trimmingCharacters(in: .whitespaces).isEmpty && !goal.deckIDs.isEmpty
+    }
+
     var body: some View {
-        Form {
-            Section("What") {
-                TextField("Maths mock, driving theory…", text: $goal.name)
-                    .accessibilityIdentifier("goal.name")
-            }
-            Section("When") {
-                DatePicker("Date", selection: $goal.date, in: Date()..., displayedComponents: .date)
-            }
-            Section {
+        ScrollView {
+            VStack(spacing: 16) {
+                AppSection(title: "What") {
+                    AppTextField(placeholder: "Maths mock, driving theory…", text: $goal.name)
+                        .accessibilityIdentifier("goal.name")
+                }
+                AppSection(title: "When") {
+                    DatePicker("Date", selection: $goal.date, in: Date()..., displayedComponents: .date)
+                        .font(Theme.body(15))
+                        .tint(Theme.accent(scheme))
+                }
+                AppSection(title: "Which decks does it cover?",
+                           footer: "These jump the queue, and the plan pushes harder as the date nears.") {
                 ForEach(decks) { deck in
                     Button {
                         if goal.deckIDs.contains(deck.id) {
@@ -485,22 +501,28 @@ private struct GoalEditor: View {
                     }
                     .buttonStyle(.plain)
                 }
-            } header: {
-                Text("Which decks does it cover?")
-            } footer: {
-                Text("These jump the queue, and the plan pushes harder as the date nears.")
+                }
+
+                Button { onSave(goal) } label: {
+                    Text("Add")
+                        .font(Theme.label(17))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(SpringyButtonStyle(tint: canSave ? Theme.accent(scheme)
+                                                              : Theme.softInk(scheme).opacity(0.3)))
+                .disabled(!canSave)
+                .accessibilityIdentifier("goal.save")
             }
+            .padding(20)
+            .frame(maxWidth: 620)
+            .frame(maxWidth: .infinity)
         }
-        .navigationTitle("Coming up")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Button("Cancel", action: onCancel) }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Add") { onSave(goal) }
-                    .disabled(goal.name.trimmingCharacters(in: .whitespaces).isEmpty
-                              || goal.deckIDs.isEmpty)
-                    .accessibilityIdentifier("goal.save")
-            }
+        .background(Theme.page(scheme))
+        .safeAreaInset(edge: .top) {
+            AppHeader(title: "Coming up", onBack: onCancel)
+                .background(Theme.page(scheme))
         }
+        .navigationBarHidden(true)
     }
 }

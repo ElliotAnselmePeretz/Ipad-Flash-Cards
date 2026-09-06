@@ -4,6 +4,7 @@ import FlashcardsCore
 
 struct CardListView: View {
     let deck: StoredDeck
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var editingCard: StoredCard?
@@ -73,37 +74,31 @@ struct CardListView: View {
                 try? context.save()
             }
         }
-        .navigationTitle("Cards")
-        .navigationBarTitleDisplayMode(.inline)
-        .overlay {
-            if cards.isEmpty {
-                ContentUnavailableView("No cards", systemImage: "rectangle.on.rectangle",
-                                       description: Text("Add your first card to this deck."))
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Button("Done") { dismiss() } }
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    RapidCaptureView(deck: deck)
-                } label: {
-                    Label("Write cards", systemImage: "pencil.and.scribble")
+        .scrollContentBackground(.hidden)
+        .background(Theme.page(scheme))
+        .safeAreaInset(edge: .top) {
+            AppHeader(title: "Cards", onBack: { dismiss() }) {
+                NavigationLink { RapidCaptureView(deck: deck) } label: {
+                    HeaderGlyph(symbol: "pencil.and.scribble", label: "Write cards",
+                                tint: Theme.accent(scheme))
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    ImportView(deck: deck)
-                } label: {
-                    Label("Import", systemImage: "square.and.arrow.down")
+                NavigationLink { ImportView(deck: deck) } label: {
+                    HeaderGlyph(symbol: "square.and.arrow.down", label: "Import")
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Add card", systemImage: "plus") {
+                HeaderButton(symbol: "plus", label: "Add card") {
                     let card = StoredCard(deck: deck)
                     context.insert(card)
                     try? context.save()
                     editingCard = card
                 }
+            }
+            .background(Theme.page(scheme))
+        }
+        .navigationBarHidden(true)
+        .overlay {
+            if cards.isEmpty {
+                ContentUnavailableView("No cards", systemImage: "rectangle.on.rectangle",
+                                       description: Text("Add your first card to this deck."))
             }
         }
         .navigationDestination(item: $editingCard) { card in
@@ -151,13 +146,10 @@ struct CardEditorView: View {
             Theme.page(scheme).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Picker("Side", selection: $side) {
-                    ForEach(Side.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("sidePicker")
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+                AppSegmented(items: Side.allCases, label: \.rawValue, selection: $side)
+                    .accessibilityIdentifier("sidePicker")
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
                 if !importedCaption.isEmpty {
                     Text(importedCaption)

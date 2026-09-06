@@ -14,6 +14,7 @@ struct StudyView: View {
     @State private var isEditingCards = false
     @State private var flipped = false
     @State private var leechNotice: String?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -54,39 +55,31 @@ struct StudyView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .navigationTitle(deck.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Undo", systemImage: "arrow.uturn.backward") {
+        .safeAreaInset(edge: .top) {
+            AppHeader(title: deck.name,
+                      subtitle: session.map { "\($0.counts.total) waiting" },
+                      onBack: { dismiss() }) {
+                HeaderButton(symbol: "arrow.uturn.backward", label: "Undo",
+                             isEnabled: session?.canUndo ?? false) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                         flipped = true
                         session?.undoLastGrade()
                     }
                 }
-                .disabled(!(session?.canUndo ?? false))
-                .accessibilityIdentifier("study.undo")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    RapidCaptureView(deck: deck)
-                } label: {
-                    Label("Write cards", systemImage: "pencil.and.scribble")
+                NavigationLink { RapidCaptureView(deck: deck) } label: {
+                    HeaderGlyph(symbol: "pencil.and.scribble", label: "Write cards",
+                                tint: Theme.accent(scheme))
                 }
-                .accessibilityIdentifier("study.write")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("All cards", systemImage: "square.stack") { isEditingCards = true }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+                HeaderButton(symbol: "square.stack", label: "All cards") {
+                    isEditingCards = true
+                }
                 NavigationLink { StatsView(deck: deck) } label: {
-                    Label("Statistics", systemImage: "chart.bar")
+                    HeaderGlyph(symbol: "chart.bar", label: "Statistics")
                 }
             }
-            if let session, session.stage != .finished {
-                ToolbarItem(placement: .principal) { counts(session) }
-            }
+            .background(Theme.page(scheme))
         }
+        .navigationBarHidden(true)
         .sheet(isPresented: $isEditingCards, onDismiss: { session?.rebuild() }) {
             NavigationStack { CardListView(deck: deck) }
         }

@@ -59,13 +59,14 @@ struct RapidCaptureView: View {
                     .padding(.bottom, 18)
             }
         }
-        .navigationTitle("Write cards")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Done") { dismiss() }.accessibilityIdentifier("rapid.done")
-            }
+        .safeAreaInset(edge: .top) {
+            AppHeader(title: "Write cards",
+                      subtitle: createdCount > 0 ? "^[\(createdCount) card](inflect: true) written" : nil,
+                      onBack: { dismiss() })
+                .accessibilityIdentifier("rapid.done")
+                .background(Theme.page(scheme))
         }
+        .navigationBarHidden(true)
     }
 
     // MARK: - Header

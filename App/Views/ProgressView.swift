@@ -11,6 +11,7 @@ struct OverallProgressView: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(UsageTracker.self) private var usage
+    @Environment(\.dismiss) private var dismiss
 
     // MARK: - Data
 
@@ -103,8 +104,11 @@ struct OverallProgressView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Theme.page(scheme))
-        .navigationTitle("Progress")
-        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            AppHeader(title: "Progress", onBack: { dismiss() })
+                .background(Theme.page(scheme))
+        }
+        .navigationBarHidden(true)
         .onAppear { usage.commit() }
     }
 
