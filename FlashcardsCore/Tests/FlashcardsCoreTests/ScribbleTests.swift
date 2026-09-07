@@ -34,7 +34,7 @@ final class ScribbleDetectorTests: XCTestCase {
     // MARK: - Detection
 
     func testADenseZigZagIsAScribble() {
-        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35, over: [word()]))
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.3, over: [word()]))
     }
 
     func testAStraightLineIsNot() {
@@ -91,7 +91,7 @@ final class ScribbleDetectorTests: XCTestCase {
 
     /// The change that matters: the same shape, drawn slowly, is deliberate work.
     func testTheSameShapeDrawnSlowlyIsNotAScribble() {
-        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35, over: [word()]))
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.3, over: [word()]))
         XCTAssertFalse(detector.isScribble(scribble(), duration: 2.5, over: [word()]),
                        "a shape drawn carefully is drawing, not deleting")
     }
@@ -134,7 +134,7 @@ final class ScribbleDetectorTests: XCTestCase {
     }
 
     func testAScribbleOverInkIsADeletion() {
-        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.35, over: [word()]))
+        XCTAssertTrue(detector.isScribble(scribble(), duration: 0.3, over: [word()]))
     }
 
     func testMostOfAScratchOutLiesOnTopOfTheWord() {
@@ -159,7 +159,7 @@ final class ScribbleDetectorTests: XCTestCase {
 
     /// Because overlap carries the evidence, fewer passes are needed than before.
     func testAShortScratchOverAWordStillCounts() {
-        XCTAssertTrue(detector.isScribble(scribble(passes: 5), duration: 0.3, over: [word()]),
+        XCTAssertTrue(detector.isScribble(scribble(passes: 5), duration: 0.25, over: [word()]),
                       "a few quick passes over a word should be enough")
     }
 
@@ -168,21 +168,29 @@ final class ScribbleDetectorTests: XCTestCase {
     /// The point of the change: two quick passes over a word should be enough.
     func testTwoPassesOverAWordIsEnough() {
         let quick = scribble(passes: 2)
-        XCTAssertTrue(detector.isScribble(quick, duration: 0.18, over: [word()]),
+        XCTAssertTrue(detector.isScribble(quick, duration: 0.12, over: [word()]),
                       "crossing something out is two strokes, not eight")
     }
 
+    /// Taken from measured strokes: ordinary writing runs about 250 points per second and
+    /// a density near 2, while scratch-outs run about 650 and a density near 3.
+    func testWritingPaceOverExistingInkIsNotDeletion() {
+        let ordinary = line(from: CGPoint(x: 0, y: 108), to: CGPoint(x: 60, y: 130), steps: 30)
+        XCTAssertFalse(detector.isScribble(ordinary, duration: 0.25, over: [word()]),
+                       "letters sit close together, so writing often overlaps; it is not deleting")
+    }
+
     func testThreePassesOverAWordIsEnough() {
-        XCTAssertTrue(detector.isScribble(scribble(passes: 3), duration: 0.25, over: [word()]))
+        XCTAssertTrue(detector.isScribble(scribble(passes: 3), duration: 0.2, over: [word()]))
     }
 
     /// The relaxation applies only on top of ink. On blank paper nothing is relaxed.
     func testTwoPassesOnBlankPaperDeletesNothing() {
-        XCTAssertFalse(detector.isScribble(scribble(passes: 2), duration: 0.18, over: []))
+        XCTAssertFalse(detector.isScribble(scribble(passes: 2), duration: 0.12, over: []))
     }
 
     func testTwoPassesAwayFromInkDeletesNothing() {
-        XCTAssertFalse(detector.isScribble(scribble(passes: 2), duration: 0.18, over: [word(y: 900)]))
+        XCTAssertFalse(detector.isScribble(scribble(passes: 2), duration: 0.12, over: [word(y: 900)]))
     }
 
     /// Drawing over your own work slowly is still drawing.
@@ -201,7 +209,7 @@ final class ScribbleDetectorTests: XCTestCase {
     // MARK: - Measurement
 
     func testMeasurementAgreesWithTheDecision() {
-        let fast = detector.measure(scribble(), duration: 0.35, over: [word()])
+        let fast = detector.measure(scribble(), duration: 0.3, over: [word()])
         XCTAssertTrue(fast.isScribble)
         XCTAssertNil(fast.rejectedBy)
 

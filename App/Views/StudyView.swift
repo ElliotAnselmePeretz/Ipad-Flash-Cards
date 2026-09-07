@@ -57,7 +57,10 @@ struct StudyView: View {
         }
         .safeAreaInset(edge: .top) {
             AppHeader(title: deck.name,
-                      subtitle: session.map { "\($0.counts.total) waiting" },
+                      subtitle: session.map {
+                          $0.isReviewingAhead ? "reviewing early · \($0.counts.total) cards"
+                                              : "\($0.counts.total) waiting"
+                      },
                       onBack: { dismiss() }) {
                 HeaderButton(symbol: "arrow.uturn.backward", label: "Undo",
                              isEnabled: session?.canUndo ?? false) {
@@ -69,6 +72,11 @@ struct StudyView: View {
                 NavigationLink { RapidCaptureView(deck: deck) } label: {
                     HeaderGlyph(symbol: "pencil.and.scribble", label: "Write cards",
                                 tint: Theme.accent(scheme))
+                }
+                HeaderButton(symbol: "arrow.trianglehead.clockwise", label: "Review anyway") {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        session?.reviewAhead()
+                    }
                 }
                 HeaderButton(symbol: "square.stack", label: "All cards") {
                     isEditingCards = true
@@ -307,6 +315,24 @@ struct StudyView: View {
                     .buttonStyle(QuietButtonStyle())
             }
             .padding(.top, 6)
+
+            Button {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    session.reviewAhead()
+                }
+            } label: {
+                Label("Review anyway", systemImage: "arrow.trianglehead.clockwise")
+                    .font(Theme.label(17))
+                    .frame(minWidth: 240)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(SpringyButtonStyle(tint: Theme.accent(scheme)))
+            .accessibilityIdentifier("study.reviewAhead")
+            .padding(.top, 4)
+
+            Text("Nothing is due, but you can go over the deck early.")
+                .font(Theme.body(13))
+                .foregroundStyle(Theme.softInk(scheme))
 
             NavigationLink {
                 RapidCaptureView(deck: deck)

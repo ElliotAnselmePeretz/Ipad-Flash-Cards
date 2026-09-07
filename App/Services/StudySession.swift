@@ -54,7 +54,43 @@ final class StudySession {
     }
 
     /// Rebuilds today's queue from the store.
+    /// True when the queue was built by ignoring the schedule.
+    private(set) var isReviewingAhead = false
+
+    /// Study cards that are not due yet.
+    ///
+    /// `rebuild` only collects what the scheduler says is due, which is correct but means
+    /// that once a deck is finished there is no way to go over it again — the button
+    /// appeared broken because there was genuinely nothing to find. This ignores due dates
+    /// and daily limits so a deck can be revised whenever the user wants, before a test or
+    /// simply because they feel like it.
+    ///
+    /// Answers still count and still reschedule. FSRS handles an early review correctly:
+    /// recall is high, so the stability gain is small. Practising early is not free, but
+    /// nor is it harmful, and pretending it never happened would make the memory estimate
+    /// lie.
+    func reviewAhead(now: Date = Date()) {
+        let deckID = deck.id
+        let descriptor = FetchDescriptor<StoredCard>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.dueDate)]
+        )
+        let stored = ((try? context.fetch(descriptor)) ?? [])
+            .filter { $0.deck?.id == deckID && !$0.isSuspended }
+
+        queue = stored
+        counts = QueueCounts(
+            learning: stored.filter { !$0.scheduling.isGraduated && $0.scheduling.phase != .new }.count,
+            review: stored.filter { $0.scheduling.phase == .review }.count,
+            new: stored.filter { $0.scheduling.phase == .new }.count
+        )
+        isReviewingAhead = true
+        stage = queue.isEmpty ? .finished : .question
+        shownAt = now
+    }
+
     func rebuild(now: Date = Date()) {
+        isReviewingAhead = false
         // Relationship traversal is deliberately kept OUT of the predicate: CoreData
         // cannot translate a chained optional keypath like `card?.deck?.id` into SQL and
         // throws at fetch time. Filter on stored columns, then narrow in Swift.

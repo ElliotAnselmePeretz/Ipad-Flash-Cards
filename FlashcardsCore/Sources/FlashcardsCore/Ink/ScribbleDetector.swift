@@ -36,6 +36,12 @@ public struct ScribbleDetector: Sendable {
     /// What a stroke needs when it is clearly over existing ink.
     public var strongOverlapReversals: Int
     public var strongOverlapLength: CGFloat
+    /// Path length as a multiple of its own size, required even on top of ink.
+    ///
+    /// Measured from real strokes: scratch-outs run about 3.0, ordinary writing about 2.0.
+    /// Overlap alone proved too weak a signal because letters sit close together, so most
+    /// normal strokes overlap something.
+    public var strongOverlapDensity: CGFloat
     /// A floor that still applies: dragging slowly over your own work is drawing, not
     /// deleting, however much of it is on top.
     public var strongOverlapSpeed: CGFloat
@@ -43,8 +49,9 @@ public struct ScribbleDetector: Sendable {
     public init(minimumReversals: Int = 3, minimumDensity: CGFloat = 1.8,
                 minimumLength: CGFloat = 60, minimumSpeed: CGFloat = 300,
                 minimumElongation: CGFloat = 1.2, minimumOverlap: CGFloat = 0.55,
-                strongOverlap: CGFloat = 0.7, strongOverlapReversals: Int = 2,
-                strongOverlapLength: CGFloat = 35, strongOverlapSpeed: CGFloat = 140) {
+                strongOverlap: CGFloat = 0.75, strongOverlapReversals: Int = 2,
+                strongOverlapLength: CGFloat = 60, strongOverlapDensity: CGFloat = 2.2,
+                strongOverlapSpeed: CGFloat = 400) {
         self.minimumReversals = minimumReversals
         self.minimumDensity = minimumDensity
         self.minimumLength = minimumLength
@@ -54,6 +61,7 @@ public struct ScribbleDetector: Sendable {
         self.strongOverlap = strongOverlap
         self.strongOverlapReversals = strongOverlapReversals
         self.strongOverlapLength = strongOverlapLength
+        self.strongOverlapDensity = strongOverlapDensity
         self.strongOverlapSpeed = strongOverlapSpeed
     }
 
@@ -63,7 +71,7 @@ public struct ScribbleDetector: Sendable {
     /// scratch-out never leaves the word it is crossing out, so it registered as a single
     /// entry. What distinguishes it is that nearly all of it is on top of something.
     public func overlap(of stroke: [CGPoint], over candidates: [[CGPoint]],
-                        tolerance: CGFloat = 16) -> CGFloat {
+                        tolerance: CGFloat = 10) -> CGFloat {
         guard !candidates.isEmpty, !stroke.isEmpty else { return 0 }
 
         // Only consider strokes near the scribble at all, so this stays cheap.
@@ -137,6 +145,7 @@ public struct ScribbleDetector: Sendable {
             rejected = "no-timing"
         } else if overlapRatio >= strongOverlap {
             if length < strongOverlapLength { rejected = "length(strong)" }
+            else if density < strongOverlapDensity { rejected = "density(strong)" }
             else if reversalCount < strongOverlapReversals { rejected = "reversals(strong)" }
             else if speed < strongOverlapSpeed { rejected = "speed(strong)" }
         } else if overlapRatio >= minimumOverlap {

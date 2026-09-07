@@ -18,7 +18,10 @@ enum ScribbleLog {
 
     static func record(_ m: ScribbleDetector.Measurement) {
         let line = String(
-            format: "%@  len=%.0f diag=%.0f density=%.2f elong=%.2f rev=%d dur=%.2fs speed=%.0f  %@",
+            // Placeholders and arguments must stay in step: an earlier edit changed the
+            // arguments but not the labels, so every column after the first was mislabelled
+            // and %d receiving a Double printed garbage.
+            format: "%@  len=%.0f density=%.2f elong=%.2f rev=%d dur=%.3fs speed=%.0f overlap=%.2f  %@",
             ISO8601DateFormatter().string(from: Date()),
             m.length, m.density, m.elongation, m.reversals, m.duration, m.speed, m.overlap,
             m.isScribble ? "ERASED" : "kept (\(m.rejectedBy ?? "?"))"
