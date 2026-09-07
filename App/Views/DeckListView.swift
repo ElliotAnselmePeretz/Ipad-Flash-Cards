@@ -208,6 +208,11 @@ struct DeckListView: View {
                     } label: {
                         HeaderGlyph(symbol: "chart.line.uptrend.xyaxis", label: "Progress")
                     }
+                    NavigationLink {
+                        HandwritingCaptureView()
+                    } label: {
+                        HeaderGlyph(symbol: "signature", label: "Your handwriting")
+                    }
                     HeaderButton(symbol: "plus", label: "New deck", tint: Theme.accent(scheme)) {
                         isAddingDeck = true
                     }
