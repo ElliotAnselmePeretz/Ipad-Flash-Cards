@@ -207,11 +207,30 @@ final class StudyGoalTests: XCTestCase {
         XCTAssertEqual(plan.goal?.name, "Physics")
     }
 
+    /// Anchored to a fixed hour rather than whatever time the suite happens to run.
+    ///
+    /// Counting in seconds made this depend on the wall clock: 1.2 days after nine in the
+    /// evening is two calendar days away, so the same assertion passed in the morning and
+    /// failed at night. A countdown is measured in days on a calendar, not in seconds.
     func testCountdownReadsNaturally() {
-        let now = Date()
-        XCTAssertEqual(StudyGoal(name: "x", date: now, deckIDs: []).countdown(from: now), "today")
-        XCTAssertEqual(StudyGoal(name: "x", date: now.addingTimeInterval(86_400 * 1.2), deckIDs: []).countdown(from: now), "tomorrow")
-        XCTAssertEqual(StudyGoal(name: "x", date: now.addingTimeInterval(86_400 * 4.2), deckIDs: []).countdown(from: now), "in 4 days")
+        let calendar = Calendar.current
+        let now = calendar.date(byAdding: .hour, value: 9, to: calendar.startOfDay(for: Date()))!
+
+        func goal(inDays days: Int, atHour hour: Int) -> StudyGoal {
+            let day = calendar.date(byAdding: .day, value: days, to: calendar.startOfDay(for: now))!
+            return StudyGoal(name: "x", date: calendar.date(byAdding: .hour, value: hour, to: day)!,
+                             deckIDs: [])
+        }
+
+        XCTAssertEqual(goal(inDays: 0, atHour: 9).countdown(from: now), "today")
+        XCTAssertEqual(goal(inDays: 1, atHour: 23).countdown(from: now), "tomorrow",
+                       "late tomorrow is still tomorrow")
+        XCTAssertEqual(goal(inDays: 4, atHour: 14).countdown(from: now), "in 4 days")
+        XCTAssertEqual(goal(inDays: 7, atHour: 9).countdown(from: now), "in 7 days",
+                       "a week out still reads in days; weeks start at a fortnight")
+        XCTAssertEqual(goal(inDays: 14, atHour: 9).countdown(from: now), "in 2 weeks")
+        XCTAssertEqual(goal(inDays: 21, atHour: 9).countdown(from: now), "in 3 weeks")
+        XCTAssertEqual(goal(inDays: -1, atHour: 9).countdown(from: now), "passed")
     }
 
     func testOldSettingsWithoutGoalsStillDecode() throws {

@@ -100,7 +100,11 @@ public struct StudyGoal: Codable, Sendable, Equatable, Identifiable, Hashable {
         case 0: return "today"
         case 1: return "tomorrow"
         case 2...13: return "in \(days) days"
-        default: return "in \(days / 7) ^[week](inflect: true)".replacingOccurrences(of: "^[week](inflect: true)", with: days / 7 == 1 ? "week" : "weeks")
+        default:
+            // Spelled out rather than left as inflection markup: this is a plain String, and
+            // the automatic agreement in `Text` never reaches one.
+            let weeks = days / 7
+            return "in \(weeks) \(weeks == 1 ? "week" : "weeks")"
         }
     }
 }

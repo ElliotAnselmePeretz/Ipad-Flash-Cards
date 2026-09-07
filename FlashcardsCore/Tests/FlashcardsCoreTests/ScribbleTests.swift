@@ -206,6 +206,31 @@ final class ScribbleDetectorTests: XCTestCase {
                       "a stroke over ink should be judged by the relaxed rules")
     }
 
+    /// The case the relaxed rules have to survive: a letter written on top of existing ink,
+    /// which is ordinary when lines sit close together.
+    ///
+    /// What saves it is that a letter travels across the page and never doubles back along
+    /// the way it is going, however much it zig-zags across it. A scratch-out returns over
+    /// its own ground, and that is the difference the reversal count is measuring.
+    func testALetterWrittenOverExistingInkIsNotDeletion() {
+        let m = [CGPoint(x: 0, y: 140), CGPoint(x: 10, y: 100), CGPoint(x: 20, y: 135),
+                 CGPoint(x: 30, y: 100), CGPoint(x: 40, y: 140)]
+        var stroke: [CGPoint] = []
+        for i in 0..<(m.count - 1) {
+            stroke += line(from: m[i], to: m[i + 1], steps: 6)
+        }
+        // Written across a word rather than a single line, so the letter really is on top
+        // of ink and the relaxed rules are the ones judging it.
+        let underneath = stride(from: 100.0, through: 140.0, by: 10.0).map { y in
+            line(from: CGPoint(x: 0, y: y), to: CGPoint(x: 120, y: y), steps: 30)
+        }
+        let measured = detector.measure(stroke, duration: TimeInterval(detector.pathLength(stroke) / 250),
+                                        over: underneath)
+        XCTAssertFalse(measured.isScribble,
+                       "an 'm' written at writing pace over a word is writing, not deleting")
+        XCTAssertEqual(measured.rejectedBy, "reversals(strong)")
+    }
+
     // MARK: - Measurement
 
     func testMeasurementAgreesWithTheDecision() {
@@ -215,11 +240,15 @@ final class ScribbleDetectorTests: XCTestCase {
 
         let slow = detector.measure(scribble(), duration: 2.5, over: [word()])
         XCTAssertFalse(slow.isScribble)
-        XCTAssertEqual(slow.rejectedBy, "speed")
+        // Squarely on top of the word, so the relaxed rules are the ones that judged it.
+        XCTAssertEqual(slow.rejectedBy, "speed(strong)")
     }
 
     func testMeasurementNamesTheRuleThatRefused() {
-        let straight = detector.measure(line(from: .zero, to: CGPoint(x: 400, y: 0)),
+        // Along the word and past the end of it: enough overlap to be worth judging, not
+        // enough to earn the relaxed rules. A straight line has nowhere near the density
+        // of a scratch-out, and that is what the measurement should say.
+        let straight = detector.measure(line(from: CGPoint(x: 0, y: 108), to: CGPoint(x: 200, y: 108)),
                                         duration: 0.3, over: [word()])
         XCTAssertFalse(straight.isScribble)
         XCTAssertEqual(straight.rejectedBy, "density")
@@ -263,8 +292,16 @@ final class ScribbleDetectorTests: XCTestCase {
         XCTAssertTrue(detector.strokesCrossed(by: scribble(), candidates: [[]]).isEmpty)
     }
 
+    /// Both rule sets have to be tightened: a stroke sitting on top of ink is judged by the
+    /// relaxed thresholds, so raising only the ordinary ones leaves it untouched.
     func testSensitivityIsAdjustable() {
-        let strict = ScribbleDetector(minimumReversals: 40, minimumDensity: 20, minimumLength: 60)
-        XCTAssertFalse(strict.isScribble(scribble(), duration: 0.3, over: [word()]), "a stricter detector should refuse more")
+        let strict = ScribbleDetector(minimumReversals: 40, minimumDensity: 20, minimumLength: 60,
+                                      strongOverlapReversals: 40, strongOverlapDensity: 20)
+        XCTAssertFalse(strict.isScribble(scribble(), duration: 0.3, over: [word()]),
+                       "a stricter detector should refuse more")
+
+        let lenient = ScribbleDetector()
+        XCTAssertTrue(lenient.isScribble(scribble(), duration: 0.3, over: [word()]),
+                      "the same stroke passes at the usual settings")
     }
 }

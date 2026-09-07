@@ -49,8 +49,8 @@ public struct ScribbleDetector: Sendable {
     public init(minimumReversals: Int = 3, minimumDensity: CGFloat = 1.8,
                 minimumLength: CGFloat = 60, minimumSpeed: CGFloat = 300,
                 minimumElongation: CGFloat = 1.2, minimumOverlap: CGFloat = 0.55,
-                strongOverlap: CGFloat = 0.75, strongOverlapReversals: Int = 2,
-                strongOverlapLength: CGFloat = 60, strongOverlapDensity: CGFloat = 2.2,
+                strongOverlap: CGFloat = 0.75, strongOverlapReversals: Int = 1,
+                strongOverlapLength: CGFloat = 60, strongOverlapDensity: CGFloat = 1.9,
                 strongOverlapSpeed: CGFloat = 400) {
         self.minimumReversals = minimumReversals
         self.minimumDensity = minimumDensity
@@ -136,6 +136,12 @@ public struct ScribbleDetector: Sendable {
         // evidence and barely any scribbling is needed — two passes back and forth is
         // exactly what people do to cross something out. Only when the overlap is
         // marginal do the full shape rules have to be satisfied instead.
+        //
+        // The relaxed thresholds have to admit what two passes actually measures: out and
+        // back over the same span is one direction change and a density of about 2, so
+        // anything above that asks for a third pass no matter what it claims to allow.
+        // Speed is what still separates this from writing, which runs far slower over the
+        // same shape.
         var rejected: String?
         if points.count < 8 {
             rejected = "points"
