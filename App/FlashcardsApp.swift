@@ -54,6 +54,9 @@ struct RootView: View {
                     NavigationStack { OverallProgressView(profile: profile) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-handwriting") {
                     NavigationStack { HandwritingCaptureView() }
+                } else if ProcessInfo.processInfo.arguments.contains("-open-paste"),
+                          let deck = profile.decks.first(where: { $0.deletedAt == nil }) {
+                    NavigationStack { PasteCardsView(deck: deck) }
                 } else {
                     DeckListView(profile: profile)
                 }

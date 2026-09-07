@@ -21,6 +21,7 @@ struct ImportView: View {
     @State private var frontColumn = 0
     @State private var backColumn = 1
     @State private var skipDuplicates = true
+    @State private var inMyHand = true
     @State private var errorMessage: String?
 
     private let importer = CardImporter()
@@ -88,6 +89,10 @@ struct ImportView: View {
 
                 Section("Options") {
                     Toggle("Skip questions already in this deck", isOn: $skipDuplicates)
+                    if HandwritingStore(context: context).capturedCount() > 0 {
+                        Toggle("Write the text in my handwriting", isOn: $inMyHand)
+                            .accessibilityIdentifier("import.inMyHand")
+                    }
                 }
 
                 Section("Preview") {
@@ -185,9 +190,17 @@ struct ImportView: View {
 
     private func performImport() {
         guard let result else { return }
+        let handwriting = HandwritingStore(context: context)
+        let write = inMyHand && handwriting.capturedCount() > 0
         for card in result.cards {
             let stored = StoredCard(deck: deck, frontText: card.front.text, backText: card.back.text)
             stored.createdAt = card.createdAt
+            if write {
+                stored.frontDrawing = handwriting.compose(card.front.text, maxWidth: 680).drawing.dataRepresentation()
+                if !card.back.text.isEmpty {
+                    stored.backDrawing = handwriting.compose(card.back.text, maxWidth: 680).drawing.dataRepresentation()
+                }
+            }
             context.insert(stored)
         }
         try? context.save()

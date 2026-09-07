@@ -167,6 +167,12 @@ public struct HandwritingLayout: Sendable {
         self.evenness = evenness
     }
 
+    /// Even and steady: every letter of a kind the same height, all on one line, nothing
+    /// tilted or nudged. This is the neat version of the hand rather than the lively one.
+    public static func tidy(bodyHeight: CGFloat = 44) -> HandwritingLayout {
+        HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.08, jitter: 0, evenness: 1)
+    }
+
     /// The size everything else is measured against: the usual height of a plain lowercase
     /// letter in this library.
     public static func reference(_ samples: [Character: [GlyphMetrics]]) -> CGFloat {
@@ -239,8 +245,13 @@ public struct HandwritingLayout: Sendable {
         var pen = CGPoint(x: 0, y: ascent)      // y is the writing line, not the top of the ink
         var widest: CGFloat = 0
 
-        // Break on words so a line never splits one in half.
-        for (wordIndex, word) in text.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
+        // A line break in the text is a line break on the page; within a paragraph, break
+        // on words so a line never splits one in half.
+        let paragraphs = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+        for (paragraphIndex, paragraph) in paragraphs.enumerated() {
+        if paragraphIndex > 0 { pen = CGPoint(x: 0, y: pen.y + lineHeight) }
+        for (wordIndex, word) in paragraph.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
             let wordWidth = width(of: String(word), samples: samples,
                                   gap: gap, base: base, medians: medians)
 
@@ -288,6 +299,7 @@ public struct HandwritingLayout: Sendable {
                 pen.x += drawnWidth + gap
                 widest = max(widest, pen.x)
             }
+        }
         }
 
         return Result(

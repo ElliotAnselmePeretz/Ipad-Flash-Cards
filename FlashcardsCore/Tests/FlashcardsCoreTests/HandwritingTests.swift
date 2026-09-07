@@ -182,6 +182,45 @@ final class HandwritingLayoutTests: XCTestCase {
         XCTAssertGreaterThan(reference.ascender, 0)
     }
 
+    // MARK: - Tidy
+
+    func testTidyMakesLettersOfAKindTheSameHeight() {
+        let samples = realSamples()
+        var r = rng()
+        let result = HandwritingLayout.tidy().layout("xo", samples: samples, maxWidth: 1000, using: &r)
+        XCTAssertEqual(drawnHeight(result.placements[0], samples),
+                       drawnHeight(result.placements[1], samples), accuracy: 0.01,
+                       "two plain lowercase letters come out exactly the same height")
+    }
+
+    func testTidyKeepsTallLettersTall() {
+        let samples = realSamples()
+        var r = rng()
+        let result = HandwritingLayout.tidy().layout("ol", samples: samples, maxWidth: 1000, using: &r)
+        XCTAssertGreaterThan(drawnHeight(result.placements[1], samples),
+                             drawnHeight(result.placements[0], samples) * 1.15)
+    }
+
+    func testTidyDoesNotTiltOrNudge() {
+        var r = rng()
+        let result = HandwritingLayout.tidy().layout("aaa", samples: uniformSamples(), maxWidth: 1000, using: &r)
+        XCTAssertEqual(Set(result.placements.map(\.rotation)), [0])
+        XCTAssertEqual(Set(result.placements.map(\.origin.y)).count, 1)
+    }
+
+    // MARK: - Line breaks
+
+    func testANewlineStartsANewLine() {
+        var r = rng()
+        let result = steady.layout("ab\ncd", samples: uniformSamples(), maxWidth: 1000, using: &r)
+        let ys = result.placements.map(\.origin.y)
+        XCTAssertEqual(ys[0], ys[1])
+        XCTAssertGreaterThan(ys[2], ys[0], "text after a line break sits on the next line")
+        XCTAssertEqual(ys[2], ys[3])
+        XCTAssertEqual(result.placements[2].origin.x, 0, "and starts back at the margin")
+        XCTAssertTrue(result.missing.isEmpty, "a newline is not a missing letter")
+    }
+
     // MARK: - Wrapping
 
     func testTextWrapsWithinTheGivenWidth() {

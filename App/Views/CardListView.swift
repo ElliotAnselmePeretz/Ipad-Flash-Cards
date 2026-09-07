@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PencilKit
 import FlashcardsCore
 
 struct CardListView: View {
@@ -15,6 +16,28 @@ struct CardListView: View {
     }
 
     private var suspendedCount: Int { cards.filter(\.isSuspended).count }
+
+    /// Cards with typed text on a side that has no ink yet.
+    private var typedOnly: [StoredCard] {
+        cards.filter { card in
+            (!card.frontText.isEmpty && !PKDrawing.hasStrokes(card.frontDrawing))
+                || (!card.backText.isEmpty && !PKDrawing.hasStrokes(card.backDrawing))
+        }
+    }
+
+    private func writeTypedCardsInMyHand() {
+        let handwriting = HandwritingStore(context: context)
+        for card in typedOnly {
+            if !card.frontText.isEmpty, !PKDrawing.hasStrokes(card.frontDrawing) {
+                card.frontDrawing = handwriting.compose(card.frontText, maxWidth: 680).drawing.dataRepresentation()
+            }
+            if !card.backText.isEmpty, !PKDrawing.hasStrokes(card.backDrawing) {
+                card.backDrawing = handwriting.compose(card.backText, maxWidth: 680).drawing.dataRepresentation()
+            }
+            card.modifiedAt = Date()
+        }
+        try? context.save()
+    }
 
     private func badge(_ text: String, tint: Color) -> some View {
         Text(text)
@@ -34,6 +57,18 @@ struct CardListView: View {
                           systemImage: "exclamationmark.triangle")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+            }
+            // Cards that arrived typed — an Anki or CSV import — can be written out in one go.
+            if !typedOnly.isEmpty, HandwritingStore(context: context).capturedCount() > 0 {
+                Section {
+                    Button {
+                        writeTypedCardsInMyHand()
+                    } label: {
+                        Label("Write \(counted(typedOnly.count, "typed card")) in my handwriting",
+                              systemImage: "hand.draw")
+                    }
+                    .accessibilityIdentifier("cards.writeAllInMyHand")
                 }
             }
             ForEach(cards) { card in
@@ -81,6 +116,9 @@ struct CardListView: View {
                 NavigationLink { RapidCaptureView(deck: deck) } label: {
                     HeaderGlyph(symbol: "pencil.and.scribble", label: "Write cards",
                                 tint: Theme.accent(scheme))
+                }
+                NavigationLink { PasteCardsView(deck: deck) } label: {
+                    HeaderGlyph(symbol: "doc.on.clipboard", label: "Paste cards")
                 }
                 NavigationLink { ImportView(deck: deck) } label: {
                     HeaderGlyph(symbol: "square.and.arrow.down", label: "Import")

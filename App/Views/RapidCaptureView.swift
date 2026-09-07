@@ -62,7 +62,12 @@ struct RapidCaptureView: View {
         .safeAreaInset(edge: .top) {
             AppHeader(title: "Write cards",
                       subtitle: createdCount > 0 ? "\(counted(createdCount, "card")) written" : nil,
-                      onBack: { dismiss() })
+                      onBack: { dismiss() }) {
+                // The other way to add cards: paste text and have it written out for you.
+                NavigationLink { PasteCardsView(deck: deck) } label: {
+                    HeaderGlyph(symbol: "doc.on.clipboard", label: "Paste cards")
+                }
+            }
                 .accessibilityIdentifier("rapid.done")
                 .background(Theme.page(scheme))
         }
