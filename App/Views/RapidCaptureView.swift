@@ -61,7 +61,7 @@ struct RapidCaptureView: View {
         }
         .safeAreaInset(edge: .top) {
             AppHeader(title: "Write cards",
-                      subtitle: createdCount > 0 ? "^[\(createdCount) card](inflect: true) written" : nil,
+                      subtitle: createdCount > 0 ? "\(counted(createdCount, "card")) written" : nil,
                       onBack: { dismiss() })
                 .accessibilityIdentifier("rapid.done")
                 .background(Theme.page(scheme))

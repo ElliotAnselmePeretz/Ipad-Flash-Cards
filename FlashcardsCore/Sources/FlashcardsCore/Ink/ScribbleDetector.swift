@@ -172,6 +172,7 @@ public struct ScribbleDetector: Sendable {
 
     /// Direction changes along whichever axis the stroke travels furthest on.
     func reversals(_ points: [CGPoint]) -> Int {
+        guard points.count > 1 else { return 0 }
         let box = boundingBox(points)
         let horizontal = box.width >= box.height
         let values = points.map { horizontal ? $0.x : $0.y }

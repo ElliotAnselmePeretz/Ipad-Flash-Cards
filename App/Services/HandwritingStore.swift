@@ -21,9 +21,28 @@ struct HandwritingStore {
         .mapValues { $0.sorted { $0.sampleIndex < $1.sampleIndex } }
     }
 
+    /// Letter sizes, with each one's position against the writing line resolved.
+    ///
+    /// Letters captured before the line was recorded only know their own shape, so where they
+    /// meet the line is worked out from the character itself.
     func metrics() -> [Character: [GlyphMetrics]] {
-        samples().mapValues { list in
-            list.map { GlyphMetrics(width: $0.width, height: $0.height) }
+        let library = samples()
+        var heights: [Character: [CGFloat]] = [:]
+        for (character, list) in library {
+            heights[character] = list.map { CGFloat($0.height) }
+        }
+        let reference = GlyphRest.references(heights)
+
+        return library.reduce(into: [:]) { result, entry in
+            let (character, list) = entry
+            result[character] = list.map { glyph in
+                let descender = glyph.baselineRecorded
+                    ? CGFloat(glyph.descender)
+                    : GlyphRest.estimatedDescender(for: character, height: CGFloat(glyph.height),
+                                                   xHeight: reference.xHeight,
+                                                   ascenderHeight: reference.ascender)
+                return GlyphMetrics(width: glyph.width, height: glyph.height, descender: descender)
+            }
         }
     }
 
@@ -39,7 +58,7 @@ struct HandwritingStore {
 
     // MARK: - Writing
 
-    func save(_ drawing: PKDrawing, for character: Character) {
+    func save(_ drawing: PKDrawing, for character: Character, baseline: CGFloat) {
         let bounds = drawing.bounds
         guard !bounds.isEmpty, !drawing.strokes.isEmpty else { return }
 
@@ -49,7 +68,9 @@ struct HandwritingStore {
             sampleIndex: existing,
             drawing: drawing.dataRepresentation(),
             width: bounds.width,
-            height: bounds.height
+            height: bounds.height,
+            descender: bounds.maxY - baseline,
+            baselineRecorded: true
         )
         context.insert(glyph)
         try? context.save()

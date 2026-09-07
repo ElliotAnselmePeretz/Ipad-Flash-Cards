@@ -237,13 +237,25 @@ final class StoredGlyph {
     /// Bounds of the ink when captured, so it can be scaled without re-parsing.
     var width: Double = 0
     var height: Double = 0
+    /// How far the ink fell below the writing line: the tail of a `g`, or zero for most letters.
+    ///
+    /// Recorded so letters can be set on a shared baseline rather than aligned by their tops,
+    /// which would leave a comma floating and a capital sitting low.
+    var descender: Double = 0
+    /// Whether `descender` was measured against a known writing line, rather than left to be
+    /// worked out from what the character is.
+    var baselineRecorded: Bool = false
     var createdAt: Date = Date()
 
-    init(character: Character, sampleIndex: Int, drawing: Data, width: Double, height: Double) {
+    init(character: Character, sampleIndex: Int, drawing: Data,
+         width: Double, height: Double, descender: Double = 0,
+         baselineRecorded: Bool = false) {
         self.character = String(character)
         self.sampleIndex = sampleIndex
         self.drawing = drawing
         self.width = width
         self.height = height
+        self.descender = descender
+        self.baselineRecorded = baselineRecorded
     }
 }

@@ -17,6 +17,10 @@ struct HandwritingCaptureView: View {
     @State private var index = 0
     @State private var ink: Data?
     @State private var canvasGeneration = 0
+    @State private var canvasHeight: CGFloat = 260
+
+    /// Distance from the bottom of the canvas to the writing line.
+    static let baselineInset: CGFloat = 54
     @State private var tool: InkTool = .pen
     @State private var inkColor: InkColor = .ink
     @State private var inkWidth: InkWidth = .medium
@@ -95,9 +99,9 @@ struct HandwritingCaptureView: View {
                         VStack {
                             Spacer()
                             Rectangle()
-                                .fill(Theme.softInk(scheme).opacity(0.22))
-                                .frame(height: 1)
-                                .padding(.bottom, 54)
+                                .fill(Theme.accent(scheme).opacity(0.35))
+                                .frame(height: 2)
+                                .padding(.bottom, Self.baselineInset)
                         }
 
                         DrawingCanvas(
@@ -108,13 +112,23 @@ struct HandwritingCaptureView: View {
                         .id(canvasGeneration)
 
                         if !hasInk {
-                            Text("Write it once, as you normally would")
+                            Text("Write it once, sitting on the line")
                                 .font(Theme.body(14))
                                 .foregroundStyle(Theme.softInk(scheme).opacity(0.5))
                                 .allowsHitTesting(false)
                         }
                     }
                     .frame(minHeight: 260)
+                    // The canvas height is what turns the guide into a coordinate: where the
+                    // line sits in the drawing's own space is what lets letters be set on a
+                    // shared baseline later.
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear
+                                .onAppear { canvasHeight = geo.size.height }
+                                .onChange(of: geo.size.height) { _, new in canvasHeight = new }
+                        }
+                    }
                 }
             }
             .softGlow(Theme.glow(scheme), active: hasInk, maxOpacity: 0.45)
@@ -192,8 +206,9 @@ struct HandwritingCaptureView: View {
                 .font(Theme.display(28))
                 .foregroundStyle(Theme.ink(scheme))
 
-            Text("^[\(store.capturedCount()) letter](inflect: true) captured. Any card with typed "
-                 + "text can now be written out in your hand.")
+            // One literal, not a concatenation: joining the pieces with `+` makes a String,
+            // and the inflection markup then reaches the screen unresolved.
+            Text("^[\(store.capturedCount()) letter](inflect: true) captured. Any card with typed text can now be written out in your hand.")
                 .font(Theme.body(15))
                 .foregroundStyle(Theme.softInk(scheme))
                 .multilineTextAlignment(.center)
@@ -240,7 +255,7 @@ struct HandwritingCaptureView: View {
 
     private func advance(saving: Bool) {
         if saving, let ink, let drawing = try? PKDrawing(data: ink) {
-            store.save(drawing, for: current)
+            store.save(drawing, for: current, baseline: canvasHeight - Self.baselineInset)
         }
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             index += 1

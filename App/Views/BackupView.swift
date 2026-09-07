@@ -187,8 +187,8 @@ struct BackupView: View {
                 let data = try Data(contentsOf: url)
                 let summary = try service.restore(data, into: profile)
                 automatic = AutoBackup.existing()
-                show("Restored ^[\(summary.decksAdded) deck](inflect: true) "
-                     + "and ^[\(summary.cardsAdded) card](inflect: true).", error: false)
+                show("Restored \(counted(summary.decksAdded, "deck")) "
+                     + "and \(counted(summary.cardsAdded, "card")).", error: false)
             } catch {
                 show(error.localizedDescription, error: true)
             }

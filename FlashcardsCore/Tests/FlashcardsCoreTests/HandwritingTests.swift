@@ -48,14 +48,138 @@ final class HandwritingLayoutTests: XCTestCase {
                              "a space should push the next word along")
     }
 
-    func testGlyphsAreScaledToACommonBodyHeight() {
-        var samples = uniformSamples()
-        samples["a"] = [GlyphMetrics(width: 60, height: 88)]   // captured twice as large
+    /// Heights measured from a real capture session, which is where the sizing went wrong.
+    private func realSamples() -> [Character: [GlyphMetrics]] {
+        let measured: [(Character, CGFloat, CGFloat, CGFloat)] = [
+            // character, width, height, descender
+            ("o", 42, 41, 0), ("e", 39, 40, 0), ("a", 35, 40, 0), ("c", 38, 38, 0),
+            ("n", 29, 37, 0), ("s", 31, 37, 0), ("x", 26, 23, 0), ("u", 30, 28, 0),
+            ("l", 7, 51, 0), ("b", 28, 51, 0), ("h", 41, 52, 0), ("d", 23, 60, 0),
+            ("g", 29, 55, 18), ("p", 27, 53, 17), ("y", 25, 73, 24),
+            ("M", 56, 39, 0), ("T", 70, 59, 0),
+            ("-", 30, 6, 0), (".", 12, 17, 0), ("'", 7, 17, 0),
+        ]
+        var samples: [Character: [GlyphMetrics]] = [:]
+        for (character, width, height, descender) in measured {
+            samples[character] = [GlyphMetrics(width: width, height: height, descender: descender)]
+        }
+        return samples
+    }
+
+    private func drawnHeight(_ placement: GlyphPlacement,
+                             _ samples: [Character: [GlyphMetrics]]) -> CGFloat {
+        samples[placement.character]![placement.sampleIndex].height * placement.scale
+    }
+
+    func testSmallMarksStaySmall() {
+        let samples = realSamples()
         var r = rng()
-        let result = steady.layout("ab", samples: samples, maxWidth: 1000, using: &r)
-        XCTAssertEqual(result.placements[0].scale, 0.5, accuracy: 0.001)
-        XCTAssertEqual(result.placements[1].scale, 1.0, accuracy: 0.001,
-                       "letters captured at different sizes must end up the same size")
+        let result = steady.layout("o-o", samples: samples, maxWidth: 1000, using: &r)
+        let letter = drawnHeight(result.placements[0], samples)
+        let hyphen = drawnHeight(result.placements[1], samples)
+        XCTAssertLessThan(hyphen, letter * 0.35,
+                          "a hyphen must not be blown up to the height of a letter")
+    }
+
+    func testTallLettersStayTaller() {
+        let samples = realSamples()
+        var r = rng()
+        let result = steady.layout("ol", samples: samples, maxWidth: 1000, using: &r)
+        XCTAssertGreaterThan(drawnHeight(result.placements[1], samples),
+                             drawnHeight(result.placements[0], samples) * 1.15,
+                             "an 'l' has an ascender and an 'o' does not")
+    }
+
+    func testCaptureDriftIsEvenedOut() {
+        let samples = realSamples()
+        var r = rng()
+        // 'x' was written at 23 and 'o' at 41, though both are plain lowercase.
+        let result = steady.layout("xo", samples: samples, maxWidth: 1000, using: &r)
+        let ratio = drawnHeight(result.placements[1], samples) / drawnHeight(result.placements[0], samples)
+        XCTAssertLessThan(ratio, 41.0 / 23.0,
+                          "letters of the same class should be pulled towards a common size")
+        XCTAssertGreaterThan(ratio, 1.0, "but not flattened into exactly the same size")
+    }
+
+    func testEvennessCanBeTurnedOff() {
+        let samples = realSamples()
+        let asWritten = HandwritingLayout(bodyHeight: 44, jitter: 0, evenness: 0)
+        var r = rng()
+        let result = asWritten.layout("xo", samples: samples, maxWidth: 1000, using: &r)
+        XCTAssertEqual(result.placements[0].scale, result.placements[1].scale, accuracy: 0.0001,
+                       "with no evening out, one scale serves the whole library")
+    }
+
+    func testLettersSitOnACommonBaseline() {
+        let samples = realSamples()
+        var r = rng()
+        let result = steady.layout("ogl.", samples: samples, maxWidth: 1000, using: &r)
+        let baselines = result.placements.map { placement -> CGFloat in
+            let metrics = samples[placement.character]![placement.sampleIndex]
+            return placement.origin.y + (metrics.height - metrics.descender) * placement.scale
+        }
+        for baseline in baselines {
+            XCTAssertEqual(baseline, baselines[0], accuracy: 0.001,
+                           "every letter should rest on the same writing line")
+        }
+    }
+
+    func testDescendersHangBelowTheLine() {
+        let samples = realSamples()
+        var r = rng()
+        let result = steady.layout("og", samples: samples, maxWidth: 1000, using: &r)
+        let bottom = { (placement: GlyphPlacement) -> CGFloat in
+            let metrics = samples[placement.character]![placement.sampleIndex]
+            return placement.origin.y + metrics.height * placement.scale
+        }
+        XCTAssertGreaterThan(bottom(result.placements[1]), bottom(result.placements[0]) + 5,
+                             "the tail of a 'g' belongs below the line an 'o' sits on")
+    }
+
+    // MARK: - Meeting the writing line
+
+    func testALetterThatRestsOnTheLineHasNoDrop() {
+        for character in "aoenMT7." {
+            XCTAssertEqual(GlyphRest.estimatedDescender(for: character, height: 40,
+                                                        xHeight: 37, ascenderHeight: 55), 0,
+                           "\(character) sits on the line")
+        }
+    }
+
+    func testATailedLetterKeepsOneBodyAboveTheLine() {
+        let height: CGFloat = 73                      // a real captured 'y'
+        let drop = GlyphRest.estimatedDescender(for: "y", height: height,
+                                                xHeight: 37, ascenderHeight: 55)
+        XCTAssertEqual(height - drop, 37, accuracy: 0.001,
+                       "the body of a 'y' is one lowercase height, the rest is tail")
+    }
+
+    func testAWrittenFReachesAscenderHeightNotBodyHeight() {
+        let drop = GlyphRest.estimatedDescender(for: "f", height: 81,
+                                                xHeight: 37, ascenderHeight: 55)
+        XCTAssertEqual(81 - drop, 55, accuracy: 0.001, "an 'f' is tall above the line as well as below")
+    }
+
+    func testAHyphenFloatsClearOfTheLine() {
+        let drop = GlyphRest.estimatedDescender(for: "-", height: 6,
+                                                xHeight: 37, ascenderHeight: 55)
+        XCTAssertLessThan(drop, 0, "a hyphen's bar never touches the writing line")
+    }
+
+    func testTheAscenderReferenceIgnoresF() {
+        // 'f' is much taller than the other ascenders because it also drops below the line.
+        let heights: [Character: [CGFloat]] = ["a": [37], "o": [37], "e": [37],
+                                               "b": [51], "h": [52], "l": [51],
+                                               "f": [200]]
+        let reference = GlyphRest.references(heights)
+        XCTAssertEqual(reference.xHeight, 37, accuracy: 0.001)
+        XCTAssertLessThan(reference.ascender, 60, "a tall 'f' must not drag the reference up")
+    }
+
+    func testReferencesSurviveAnEmptyLibrary() {
+        let reference = GlyphRest.references([:])
+        XCTAssertGreaterThan(reference.xHeight, 0)
+        XCTAssertGreaterThan(reference.ascender, 0)
     }
 
     // MARK: - Wrapping

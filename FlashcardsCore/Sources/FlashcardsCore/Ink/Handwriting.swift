@@ -52,6 +52,84 @@ public struct GlyphPlacement: Sendable, Equatable {
     }
 }
 
+/// How a letter meets the writing line, which is how its size has to be judged.
+///
+/// Sizing every letter to one height is what makes composed writing look wrong: it leaves
+/// an `o` as tall as an `l` and blows a hyphen up into a dash the height of a capital.
+/// Letters are only comparable within their own class.
+public enum GlyphClass: Sendable, Hashable, CaseIterable {
+    case xHeight
+    case ascender
+    case descender
+    case capital
+    case digit
+    /// `i`, `j` and punctuation: each mark has its own natural size and no useful peers.
+    case ownSize
+
+    public static func of(_ character: Character) -> GlyphClass {
+        if "acemnorsuvwxz".contains(character) { return .xHeight }
+        if "bdfhklt".contains(character) { return .ascender }
+        if "gpqy".contains(character) { return .descender }
+        if character.isUppercase { return .capital }
+        if character.isNumber { return .digit }
+        return .ownSize
+    }
+}
+
+/// Where a letter meets the writing line, for captures that did not record it.
+///
+/// Ink alone does not say where the line was: a captured `o` and a captured `g` are both
+/// just a shape. Unless the line was noted at capture time it has to come from what the
+/// character is — an `o` rests on it, a `g` hangs a tail below it, an apostrophe floats
+/// clear above it. Guessing from where the ink happened to land on the canvas does not
+/// work, because letters get written wherever there is room.
+public enum GlyphRest {
+    /// Letters whose body sits on the line with a tail below.
+    static let tailed: Set<Character> = ["g", "p", "q", "y"]
+
+    /// How far below the writing line this letter's ink reaches.
+    ///
+    /// Negative means the ink stops short of the line and floats above it, as a hyphen does.
+    public static func estimatedDescender(for character: Character, height: CGFloat,
+                                          xHeight: CGFloat, ascenderHeight: CGFloat) -> CGFloat {
+        if tailed.contains(character) {
+            // The bowl is about one lowercase body; whatever is left is tail.
+            return max(0, height - xHeight)
+        }
+        switch character {
+        case "j":
+            // Like an `i`, body and dot above the line, then the tail.
+            return max(0, height - xHeight * 1.3)
+        case "f":
+            // A written `f` reaches ascender height above the line and loops below it.
+            return max(0, height - ascenderHeight)
+        case ",", ";":
+            return xHeight * 0.15
+        case "(", ")", "/":
+            return xHeight * 0.20
+        case "\'":
+            return -xHeight * 0.60
+        case "-", "=", "+":
+            return -xHeight * 0.35
+        default:
+            return 0
+        }
+    }
+
+    /// The usual height of a plain lowercase letter, and of one with an ascender.
+    public static func references(_ heights: [Character: [CGFloat]]) -> (xHeight: CGFloat,
+                                                                        ascender: CGFloat) {
+        func median(_ characters: Set<Character>) -> CGFloat? {
+            let values = heights.filter { characters.contains($0.key) }.values.flatMap { $0 }
+            return HandwritingLayout.median(values)
+        }
+        let x = median(Set("acemnorsuvwxz")) ?? 30
+        // `f` is left out: it is the one ascender that also drops below the line.
+        let ascender = median(Set("bdhklt")) ?? x * 1.5
+        return (max(x, 1), max(ascender, 1))
+    }
+}
+
 /// Arranges captured letters into lines of text.
 ///
 /// This is what turns a library of single letters into something that reads as writing
@@ -70,15 +148,62 @@ public struct HandwritingLayout: Sendable {
     public var lineSpacing: CGFloat
     /// How much each glyph may vary, 0 for none.
     public var jitter: CGFloat
+    /// How strongly letters of the same class are pulled towards a common size.
+    ///
+    /// Capturing one letter at a time invites drift — the same hand writes `x` half the
+    /// height of `e` across two screens. 0 keeps every letter exactly as written, 1 makes
+    /// each class uniform; in between evens out the drift while leaving the variation that
+    /// makes writing look written.
+    public var evenness: CGFloat
 
     public init(bodyHeight: CGFloat = 44, letterSpacing: CGFloat = 0.06,
                 wordSpacing: CGFloat = 0.42, lineSpacing: CGFloat = 1.9,
-                jitter: CGFloat = 1) {
+                jitter: CGFloat = 1, evenness: CGFloat = 0.75) {
         self.bodyHeight = bodyHeight
         self.letterSpacing = letterSpacing
         self.wordSpacing = wordSpacing
         self.lineSpacing = lineSpacing
         self.jitter = jitter
+        self.evenness = evenness
+    }
+
+    /// The size everything else is measured against: the usual height of a plain lowercase
+    /// letter in this library.
+    public static func reference(_ samples: [Character: [GlyphMetrics]]) -> CGFloat {
+        let bodies = samples.flatMap { character, list in
+            GlyphClass.of(character) == .xHeight ? list.map(\.height) : []
+        }
+        if let median = Self.median(bodies), median > 0 { return median }
+        // Nothing plain and lowercase captured yet: any size beats dividing by zero.
+        return Self.median(samples.values.flatMap { $0.map(\.height) }).map { max($0, 1) } ?? 1
+    }
+
+    static func classMedians(_ samples: [Character: [GlyphMetrics]]) -> [GlyphClass: CGFloat] {
+        var heights: [GlyphClass: [CGFloat]] = [:]
+        for (character, list) in samples {
+            heights[GlyphClass.of(character), default: []].append(contentsOf: list.map(\.height))
+        }
+        return heights.compactMapValues { Self.median($0) }
+    }
+
+    static func median(_ values: [CGFloat]) -> CGFloat? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        return sorted[sorted.count / 2]
+    }
+
+    /// How much to grow or shrink one captured letter.
+    ///
+    /// Every letter shares one scale, so the sizes that were written are the sizes that come
+    /// out. On top of that, a letter is nudged towards the usual size of its own class, which
+    /// absorbs the drift of capturing them one at a time.
+    func scale(for character: Character, metrics: GlyphMetrics,
+               base: CGFloat, medians: [GlyphClass: CGFloat]) -> CGFloat {
+        let glyphClass = GlyphClass.of(character)
+        guard glyphClass != .ownSize, metrics.height > 0,
+              let median = medians[glyphClass], median > 0
+        else { return base }
+        return base * pow(median / metrics.height, evenness)
     }
 
     public struct Result: Sendable, Equatable {
@@ -101,16 +226,23 @@ public struct HandwritingLayout: Sendable {
         var placements: [GlyphPlacement] = []
         var missing: Set<Character> = []
 
+        let base = bodyHeight / Self.reference(samples)
+        let medians = Self.classMedians(samples)
+
         let space = bodyHeight * wordSpacing
         let gap = bodyHeight * letterSpacing
         let lineHeight = bodyHeight * lineSpacing
+        // Room above the first line for capitals and ascenders, and below the last for tails.
+        let ascent = bodyHeight * 1.8
+        let descent = bodyHeight
 
-        var pen = CGPoint(x: 0, y: 0)
+        var pen = CGPoint(x: 0, y: ascent)      // y is the writing line, not the top of the ink
         var widest: CGFloat = 0
 
         // Break on words so a line never splits one in half.
         for (wordIndex, word) in text.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
-            let wordWidth = width(of: String(word), samples: samples, gap: gap)
+            let wordWidth = width(of: String(word), samples: samples,
+                                  gap: gap, base: base, medians: medians)
 
             if wordIndex > 0 {
                 if pen.x + space + wordWidth > maxWidth, pen.x > 0 {
@@ -128,7 +260,7 @@ public struct HandwritingLayout: Sendable {
 
                 let index = variants.count == 1 ? 0 : Int.random(in: 0..<variants.count, using: &rng)
                 let metrics = variants[index]
-                let scale = bodyHeight / max(metrics.height, 1)
+                let scale = scale(for: character, metrics: metrics, base: base, medians: medians)
                 let drawnWidth = metrics.width * scale
 
                 if pen.x + drawnWidth > maxWidth, pen.x > 0 {
@@ -140,11 +272,16 @@ public struct HandwritingLayout: Sendable {
                        rotation: CGFloat.random(in: -0.035...0.035, using: &rng) * jitter,
                        lift: CGFloat.random(in: -0.04...0.04, using: &rng) * jitter * bodyHeight)
 
+                // Sit the letter on the writing line: what shows above it is everything but
+                // the tail. Aligning tops instead would hang a comma level with a capital.
+                let finalScale = scale * wobble.scale
+                let aboveLine = (metrics.height - metrics.descender) * finalScale
+
                 placements.append(GlyphPlacement(
                     character: character,
                     sampleIndex: index,
-                    origin: CGPoint(x: pen.x, y: pen.y + wobble.lift),
-                    scale: scale * wobble.scale,
+                    origin: CGPoint(x: pen.x, y: pen.y - aboveLine + wobble.lift),
+                    scale: finalScale,
                     rotation: wobble.rotation
                 ))
 
@@ -155,7 +292,7 @@ public struct HandwritingLayout: Sendable {
 
         return Result(
             placements: placements,
-            size: CGSize(width: min(max(widest, 1), maxWidth), height: pen.y + lineHeight),
+            size: CGSize(width: min(max(widest, 1), maxWidth), height: pen.y + descent),
             missing: missing
         )
     }
@@ -168,11 +305,13 @@ public struct HandwritingLayout: Sendable {
     }
 
     /// Width of a word, used to decide where lines break.
-    func width(of word: String, samples: [Character: [GlyphMetrics]], gap: CGFloat) -> CGFloat {
+    func width(of word: String, samples: [Character: [GlyphMetrics]], gap: CGFloat,
+               base: CGFloat, medians: [GlyphClass: CGFloat]) -> CGFloat {
         var total: CGFloat = 0
         for character in word {
             guard let variants = samples[character], let metrics = variants.first else { continue }
-            total += metrics.width * (bodyHeight / max(metrics.height, 1)) + gap
+            total += metrics.width * scale(for: character, metrics: metrics,
+                                           base: base, medians: medians) + gap
         }
         return max(0, total - gap)
     }
