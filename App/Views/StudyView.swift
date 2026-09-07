@@ -1,4 +1,5 @@
 import SwiftUI
+import PencilKit
 import SwiftData
 import FlashcardsCore
 
@@ -178,18 +179,20 @@ struct StudyView: View {
         let text = which == .front ? card.frontText : card.backText
         let ink = which == .front ? card.frontDrawing : card.backDrawing
 
+        let hasInk = PKDrawing.hasStrokes(ink)
         VStack(spacing: 14) {
-            // Typed text only ever comes from an import; handwritten cards have none.
-            if !text.isEmpty {
+            // Ink is the card. Typed text stands in only while a side has none — once it
+            // has been written out in the user's hand, showing both says the same thing
+            // twice.
+            if hasInk {
+                DrawingThumbnail(data: ink, height: 240)
+            } else if !text.isEmpty {
                 Text(text)
                     .font(Theme.title(30))
                     .foregroundStyle(Theme.ink(scheme))
                     .multilineTextAlignment(.center)
             }
-            if ink != nil {
-                DrawingThumbnail(data: ink, height: 240)
-            }
-            if text.isEmpty && ink == nil {
+            if text.isEmpty && !hasInk {
                 Text("This side is empty")
                     .font(Theme.body())
                     .foregroundStyle(Theme.softInk(scheme))

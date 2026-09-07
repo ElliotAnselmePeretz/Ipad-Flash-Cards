@@ -90,6 +90,7 @@ struct DrawingCanvas: UIViewRepresentable {
            canvas.drawing.dataRepresentation() != incoming.dataRepresentation() {
             canvas.drawing = incoming
         }
+        (canvas as? MenulessCanvasView)?.fitContentToDrawing()
 
         context.coordinator.apply(tool: tool, color: color, width: width, to: canvas)
     }
@@ -170,6 +171,7 @@ struct DrawingCanvas: UIViewRepresentable {
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            (canvasView as? MenulessCanvasView)?.fitContentToDrawing()
             if parent.scribbleToErase, applyScribbleErase(on: canvasView) { return }
             let encoded = canvasView.drawing.dataRepresentation()
             if parent.data != encoded { parent.data = encoded }
@@ -259,6 +261,21 @@ private final class MenulessCanvasView: PKCanvasView {
     override func layoutSubviews() {
         super.layoutSubviews()
         stripEditMenu()
+        fitContentToDrawing()
+    }
+
+    /// Lets the page scroll to wherever the ink goes.
+    ///
+    /// A canvas only scrolls as far as its content size, and PencilKit leaves that at the
+    /// frame. Composed handwriting is laid out for a fixed width and can run taller than
+    /// the space the screen gives the canvas, so the bottom of a long answer was simply
+    /// cut off with no way to reach it.
+    func fitContentToDrawing() {
+        let margin: CGFloat = 60
+        let ink = drawing.bounds
+        let needed = CGSize(width: max(bounds.width, ink.isEmpty ? 0 : ink.maxX + margin),
+                            height: max(bounds.height, ink.isEmpty ? 0 : ink.maxY + margin))
+        if contentSize != needed { contentSize = needed }
     }
 
     private func stripEditMenu() {

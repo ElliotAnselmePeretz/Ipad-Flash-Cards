@@ -229,7 +229,10 @@ struct CardEditorView: View {
                         .padding(.top, 6)
                 }
 
-                if !importedCaption.isEmpty {
+                // The typed text is shown only until the side has ink; after that the ink
+                // is the card and the caption would just repeat it.
+                if !importedCaption.isEmpty,
+                   !PKDrawing.hasStrokes(side == .front ? card.frontDrawing : card.backDrawing) {
                     Text(importedCaption)
                         .font(Theme.title(22))
                         .foregroundStyle(Theme.ink(scheme))
