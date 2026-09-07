@@ -124,6 +124,7 @@ struct CardListView: View {
 ///
 /// Typed text only ever arrives through CSV import, so an imported question is shown
 /// above the canvas as a read-only caption rather than an editable field.
+/// Fills a side with the typed text, written out in the user's own letters.
 struct CardEditorView: View {
     @Bindable var card: StoredCard
     @Environment(\.modelContext) private var context
@@ -134,11 +135,29 @@ struct CardEditorView: View {
     @State private var tool: InkTool = .pen
     @State private var inkColor: InkColor = .ink
     @State private var inkWidth: InkWidth = .medium
+    @State private var missingLetters: Set<Character> = []
+
+    private var handwriting: HandwritingStore { HandwritingStore(context: context) }
 
     enum Side: String, CaseIterable { case front = "Question", back = "Answer" }
 
     private var importedCaption: String {
         side == .front ? card.frontText : card.backText
+    }
+
+    private func writeInMyHand() {
+        let text = importedCaption
+        guard !text.isEmpty else { return }
+        let composition = handwriting.compose(text, maxWidth: 680)
+        guard !composition.drawing.strokes.isEmpty else { return }
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            let data = composition.drawing.dataRepresentation()
+            if side == .front { card.frontDrawing = data } else { card.backDrawing = data }
+            missingLetters = composition.missing
+            card.modifiedAt = Date()
+            try? context.save()
+        }
     }
 
     var body: some View {
@@ -150,6 +169,27 @@ struct CardEditorView: View {
                     .accessibilityIdentifier("sidePicker")
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
+
+                if !importedCaption.isEmpty, handwriting.capturedCount() > 0 {
+                    Button {
+                        writeInMyHand()
+                    } label: {
+                        Label("Write this in my handwriting", systemImage: "hand.draw")
+                            .font(Theme.label(15))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(SpringyButtonStyle(tint: Theme.accent(scheme)))
+                    .padding(.top, 12)
+                    .accessibilityIdentifier("card.writeInMyHand")
+                }
+
+                if !missingLetters.isEmpty {
+                    Text("Not captured yet: \(missingLetters.sorted().map(String.init).joined(separator: " "))")
+                        .font(Theme.body(12))
+                        .foregroundStyle(Theme.medium(scheme))
+                        .padding(.top, 6)
+                }
 
                 if !importedCaption.isEmpty {
                     Text(importedCaption)

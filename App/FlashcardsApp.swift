@@ -11,7 +11,7 @@ struct FlashcardsApp: App {
     /// change that turns this into a synced app — the models are already shaped for it
     /// (UUID keys, modifiedAt, soft deletes, every record scoped by profile).
     let container: ModelContainer = {
-        let schema = Schema([StoredProfile.self, StoredDeck.self, StoredCard.self, StoredReviewLog.self])
+        let schema = Schema([StoredProfile.self, StoredDeck.self, StoredCard.self, StoredReviewLog.self, StoredGlyph.self])
         // UI tests pass -ui-testing-reset so each test starts from an empty store
         // instead of inheriting whatever the previous test left behind.
         let inMemory = ProcessInfo.processInfo.arguments.contains("-ui-testing-reset")
@@ -52,6 +52,8 @@ struct RootView: View {
                 // Dev-only: lets the progress screen be opened directly for verification.
                 if ProcessInfo.processInfo.arguments.contains("-open-progress") {
                     NavigationStack { OverallProgressView(profile: profile) }
+                } else if ProcessInfo.processInfo.arguments.contains("-open-handwriting") {
+                    NavigationStack { HandwritingCaptureView() }
                 } else {
                     DeckListView(profile: profile)
                 }

@@ -220,3 +220,30 @@ final class StoredReviewLog {
 
     var grade: ReviewGrade { ReviewGrade(rawValue: gradeRaw) ?? .again }
 }
+
+/// One captured letter, in the user's own hand.
+///
+/// Stored per character with a sample index, so several attempts at the same letter can be
+/// kept and drawn on at random — repeated letters looking identical is what makes
+/// synthesised handwriting obvious.
+@Model
+final class StoredGlyph {
+    var id: UUID = UUID()
+    /// A single character, held as a String because SwiftData cannot store Character.
+    var character: String = ""
+    var sampleIndex: Int = 0
+    /// PKDrawing data for this letter alone.
+    var drawing: Data = Data()
+    /// Bounds of the ink when captured, so it can be scaled without re-parsing.
+    var width: Double = 0
+    var height: Double = 0
+    var createdAt: Date = Date()
+
+    init(character: Character, sampleIndex: Int, drawing: Data, width: Double, height: Double) {
+        self.character = String(character)
+        self.sampleIndex = sampleIndex
+        self.drawing = drawing
+        self.width = width
+        self.height = height
+    }
+}
