@@ -17,6 +17,25 @@ struct CardListView: View {
 
     private var suspendedCount: Int { cards.filter(\.isSuspended).count }
 
+    /// The deck at the top of this one's family, and every unit under it.
+    private var family: [StoredDeck] {
+        let top = deck.parent ?? deck
+        return top.liveUnits.isEmpty ? [] : [top] + top.liveUnits
+    }
+
+    /// Everywhere in the family a card could go, other than where it already is.
+    private func destinations(for card: StoredCard) -> [StoredDeck] {
+        family.filter { $0.id != card.deck?.id }
+    }
+
+    private func move(_ card: StoredCard, to target: StoredDeck) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            card.deck = target
+            card.modifiedAt = Date()
+            try? context.save()
+        }
+    }
+
     /// Cards with typed text on a side that has no ink yet.
     private var typedOnly: [StoredCard] {
         cards.filter { card in
@@ -60,6 +79,13 @@ struct CardListView: View {
                 }
             }
             // Cards that arrived typed — an Anki or CSV import — can be written out in one go.
+            if !family.isEmpty {
+                Section {
+                    Label("Hold a card, or swipe it left, to move it into a unit.", systemImage: "square.grid.2x2")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if !typedOnly.isEmpty, HandwritingStore(context: context).capturedCount() > 0 {
                 Section {
                     Button {
@@ -90,6 +116,28 @@ struct CardListView: View {
                         }
                     }
                     .opacity(card.isSuspended ? 0.55 : 1)
+                }
+                // Sorting cards into units: hold a card, or swipe it from the right.
+                .contextMenu {
+                    if !destinations(for: card).isEmpty {
+                        Menu("Move to", systemImage: "square.grid.2x2") {
+                            ForEach(destinations(for: card)) { target in
+                                Button(target.isUnit ? target.name : "\(target.name) (the deck itself)") {
+                                    move(card, to: target)
+                                }
+                            }
+                        }
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    ForEach(destinations(for: card).prefix(3)) { target in
+                        Button {
+                            move(card, to: target)
+                        } label: {
+                            Label(target.name, systemImage: "square.grid.2x2")
+                        }
+                        .tint(Theme.accent(scheme))
+                    }
                 }
                 // A suspended card has to be recoverable, or it is just gone.
                 .swipeActions(edge: .leading) {
