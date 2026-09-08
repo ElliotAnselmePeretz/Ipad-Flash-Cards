@@ -18,6 +18,28 @@ enum DevImport {
         if arguments.contains("-rewrite-handwriting") { rewriteHandwriting(context: context, profile: profile) }
         if arguments.contains("-import-cards") { importCards(context: context, profile: profile) }
         if arguments.contains("-name-report") { nameReport(profile: profile) }
+        if arguments.contains("-name-cards") { nameEveryHandwrittenCard(context: context, profile: profile) }
+    }
+
+    /// Reads a title off every handwritten card that has not got one.
+    private static func nameEveryHandwrittenCard(context: ModelContext, profile: StoredProfile) {
+        var named = 0
+        var unreadable = 0
+        for deck in profile.decks where deck.deletedAt == nil {
+            for card in deck.cards where card.deletedAt == nil {
+                guard card.frontText.isEmpty, card.readName.isEmpty, let ink = card.frontDrawing
+                else { continue }
+                if let name = InkNaming.name(from: ink) {
+                    card.readName = name
+                    named += 1
+                    print("[name] \(deck.name): \(name)")
+                } else {
+                    unreadable += 1
+                }
+            }
+        }
+        try? context.save()
+        print("[name] named \(named); \(unreadable) could not be read")
     }
 
     /// Scores reading a card's name off its ink against the text that made that ink.

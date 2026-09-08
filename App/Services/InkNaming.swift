@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import PencilKit
 import Vision
+import SwiftData
 import FlashcardsCore
 
 /// Reads a short name off the ink on a card.
@@ -63,6 +64,24 @@ enum InkNaming {
         let joined = lines.joined(separator: " ")
             .split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
         return joined.isEmpty ? nil : joined
+    }
+
+    /// Gives a handwritten card a title, unless it has words of its own or one already.
+    ///
+    /// Recognition takes long enough to be felt, so it happens off the main thread and the
+    /// card is updated when it comes back. Nothing waits for it: a card is usable the moment
+    /// it is written, and the title appears a moment later.
+    @MainActor
+    static func nameInBackground(_ card: StoredCard, context: ModelContext) {
+        guard card.frontText.isEmpty, card.readName.isEmpty, let ink = card.frontDrawing else { return }
+        Task {
+            guard let name = await Task.detached(priority: .utility, operation: {
+                InkNaming.name(from: ink)
+            }).value else { return }
+            guard card.deletedAt == nil, card.readName.isEmpty else { return }
+            card.readName = name
+            try? context.save()
+        }
     }
 
     /// A title's worth of it: the first few words, cut at a word boundary.

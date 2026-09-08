@@ -425,6 +425,8 @@ struct CardEditorView: View {
                 Button("Save") {
                     card.modifiedAt = Date()
                     try? context.save()
+                    // A card drawn here gets its title read the same way.
+                    InkNaming.nameInBackground(card, context: context)
                     dismiss()
                 }
                 .disabled(card.core.front.isEmpty)

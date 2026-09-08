@@ -246,5 +246,7 @@ struct RapidCaptureView: View {
         card.backDrawing = answerInk
         context.insert(card)
         try? context.save()
+        // Read the question for a title, so the card list never says "(handwritten)".
+        InkNaming.nameInBackground(card, context: context)
     }
 }
