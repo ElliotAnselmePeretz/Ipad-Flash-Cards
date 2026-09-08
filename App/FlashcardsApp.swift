@@ -57,6 +57,9 @@ struct RootView: View {
                 } else if ProcessInfo.processInfo.arguments.contains("-open-study"),
                           let deck = seededStudyDeck(profile) ?? profile.decks.first(where: { $0.deletedAt == nil && !$0.cards.isEmpty }) {
                     NavigationStack { StudyView(deck: deck) }
+                } else if ProcessInfo.processInfo.arguments.contains("-open-cards"),
+                          let deck = profile.decks.first(where: { $0.deletedAt == nil && !$0.cards.isEmpty }) {
+                    NavigationStack { CardListView(deck: deck) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-paste"),
                           let deck = profile.decks.first(where: { $0.deletedAt == nil }) {
                     NavigationStack { PasteCardsView(deck: deck) }
