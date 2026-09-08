@@ -16,6 +16,7 @@ struct UnitsView: View {
     @State private var newUnitName = ""
     @State private var isAddingUnit = false
     @State private var writingInto: StoredDeck?
+    @State private var unitsOf: StoredDeck?
 
     private var units: [StoredDeck] { deck.liveUnits }
     private var ownCards: Int { deck.cards.filter { $0.deletedAt == nil }.count }
@@ -55,6 +56,19 @@ struct UnitsView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("Write cards in \(unit.name)")
+
+                                // Units can hold units of their own, as deep as the subject goes.
+                                Button {
+                                    unitsOf = unit
+                                } label: {
+                                    Image(systemName: "square.grid.2x2")
+                                        .font(.system(size: 17, weight: .medium))
+                                        .frame(width: 46, height: 46)
+                                        .background(Circle().fill(Theme.ink(scheme).opacity(0.07)))
+                                        .foregroundStyle(Theme.ink(scheme))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Units of \(unit.name)")
                             }
                         }
                         .contextMenu {
@@ -99,6 +113,9 @@ struct UnitsView: View {
         .navigationBarHidden(true)
         .navigationDestination(item: $writingInto) { unit in
             RapidCaptureView(deck: unit)
+        }
+        .navigationDestination(item: $unitsOf) { unit in
+            UnitsView(deck: unit)
         }
         .overlay {
             if isAddingUnit {
@@ -148,6 +165,11 @@ private struct UnitRow: View {
                     Text("^[\(cards.count) card](inflect: true)")
                         .font(Theme.body(14))
                         .foregroundStyle(Theme.softInk(scheme))
+                    if !unit.liveUnits.isEmpty {
+                        Text("· ^[\(unit.liveUnits.count) unit](inflect: true)")
+                            .font(Theme.body(14))
+                            .foregroundStyle(Theme.softInk(scheme))
+                    }
                     if due > 0 {
                         Text("\(due) due")
                             .font(Theme.label(12))

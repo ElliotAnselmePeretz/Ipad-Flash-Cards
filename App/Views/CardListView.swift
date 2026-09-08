@@ -9,6 +9,8 @@ struct CardListView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var editingCard: StoredCard?
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
 
     private var cards: [StoredCard] {
         // Suspended cards stay listed — they are out of the review queue, not gone.
@@ -19,13 +21,65 @@ struct CardListView: View {
 
     /// The deck at the top of this one's family, and every unit under it.
     private var family: [StoredDeck] {
-        let top = deck.parent ?? deck
-        return top.liveUnits.isEmpty ? [] : [top] + top.liveUnits
+        var top = deck
+        while let parent = top.parent { top = parent }
+        let all = top.family                       // the whole tree, however deep
+        return all.count > 1 ? all : []
     }
 
     /// Everywhere in the family a card could go, other than where it already is.
     private func destinations(for card: StoredCard) -> [StoredDeck] {
         family.filter { $0.id != card.deck?.id }
+    }
+
+    /// Picking several cards and moving them in one go.
+    private var selectedCards: [StoredCard] { cards.filter { selection.contains($0.id) } }
+
+    private var selectionBar: some View {
+        HStack(spacing: 12) {
+            Text(selection.isEmpty ? "Tap cards to select them"
+                                   : "^[\(selection.count) card](inflect: true) selected")
+                .font(Theme.body(15))
+                .foregroundStyle(Theme.softInk(scheme))
+            Spacer()
+            Button(selection.count == cards.count ? "Select none" : "Select all") {
+                withAnimation {
+                    selection = selection.count == cards.count ? [] : Set(cards.map(\.id))
+                }
+            }
+            .buttonStyle(QuietButtonStyle())
+            if !family.isEmpty {
+                Menu {
+                    ForEach(family) { target in
+                        Button(target.isUnit ? target.name : "\(target.name) (the deck itself)") {
+                            moveSelected(to: target)
+                        }
+                    }
+                } label: {
+                    Label("Move to…", systemImage: "square.grid.2x2")
+                        .font(Theme.label(15))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(SpringyButtonStyle(tint: Theme.accent(scheme)))
+                .disabled(selection.isEmpty)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Theme.page(scheme))
+    }
+
+    private func moveSelected(to target: StoredDeck) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            for card in selectedCards where card.deck?.id != target.id {
+                card.deck = target
+                card.modifiedAt = Date()
+            }
+            try? context.save()
+            selection.removeAll()
+            isSelecting = false
+        }
     }
 
     private func move(_ card: StoredCard, to target: StoredDeck) {
@@ -68,7 +122,7 @@ struct CardListView: View {
     }
 
     var body: some View {
-        List {
+        List(selection: $selection) {
             if suspendedCount > 0 {
                 Section {
                     Label("^[\(suspendedCount) card](inflect: true) paused after too many lapses. "
@@ -81,7 +135,7 @@ struct CardListView: View {
             // Cards that arrived typed — an Anki or CSV import — can be written out in one go.
             if !family.isEmpty {
                 Section {
-                    Label("Hold a card, or swipe it left, to move it into a unit.", systemImage: "square.grid.2x2")
+                    Label("Hold a card or swipe it left to move it into a unit; use the tick to move several at once.", systemImage: "square.grid.2x2")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -117,6 +171,7 @@ struct CardListView: View {
                     }
                     .opacity(card.isSuspended ? 0.55 : 1)
                 }
+                .tag(card.id)
                 // Sorting cards into units: hold a card, or swipe it from the right.
                 .contextMenu {
                     if !destinations(for: card).isEmpty {
@@ -157,10 +212,23 @@ struct CardListView: View {
                 try? context.save()
             }
         }
+        .environment(\.editMode, .constant(isSelecting ? .active : .inactive))
         .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom) {
+            if isSelecting {
+                selectionBar
+            }
+        }
         .background(Theme.page(scheme))
         .safeAreaInset(edge: .top) {
             AppHeader(title: "Cards", onBack: { dismiss() }) {
+                if !family.isEmpty || cards.count > 1 {
+                    HeaderButton(symbol: isSelecting ? "checkmark.circle.fill" : "checkmark.circle",
+                                 label: isSelecting ? "Done selecting" : "Select cards",
+                                 tint: isSelecting ? Theme.accent(scheme) : nil) {
+                        withAnimation { isSelecting.toggle(); if !isSelecting { selection.removeAll() } }
+                    }
+                }
                 NavigationLink { RapidCaptureView(deck: deck) } label: {
                     HeaderGlyph(symbol: "pencil.and.scribble", label: "Write cards",
                                 tint: Theme.accent(scheme))
