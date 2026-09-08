@@ -25,8 +25,8 @@ enum PlanBuilder {
     }
 
     static func workloads(for profile: StoredProfile, now: Date = Date()) -> [DeckWorkload] {
-        profile.decks.filter { $0.deletedAt == nil }.map { deck in
-            let cards = deck.cards.filter { $0.deletedAt == nil && !$0.isSuspended }
+        profile.decks.filter { $0.deletedAt == nil && !$0.isUnit }.map { deck in
+            let cards = deck.allCards.filter { !$0.isSuspended }
             let estimate = estimator.estimate(for: cards.map(\.scheduling), now: now)
             let lastReview = cards.compactMap { $0.scheduling.lastReviewedAt }.max()
 

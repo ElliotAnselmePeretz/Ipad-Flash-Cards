@@ -49,12 +49,34 @@ final class StoredDeck {
     @Relationship(deleteRule: .cascade, inverse: \StoredCard.deck)
     var cards: [StoredCard] = []
 
-    init(id: UUID = UUID(), name: String, profile: StoredProfile?) {
+    /// A deck can hold units: Phycology has Unit 1, Unit 2… Studying the deck draws from
+    /// every unit; studying a unit draws from that unit alone.
+    var parent: StoredDeck?
+
+    @Relationship(deleteRule: .cascade, inverse: \StoredDeck.parent)
+    var units: [StoredDeck] = []
+
+    init(id: UUID = UUID(), name: String, profile: StoredProfile?, parent: StoredDeck? = nil) {
         self.id = id
         self.name = name
         self.profile = profile
+        self.parent = parent
         self.createdAt = Date()
         self.modifiedAt = Date()
+    }
+
+    var isUnit: Bool { parent != nil }
+
+    var liveUnits: [StoredDeck] {
+        units.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// This deck and every unit beneath it.
+    var family: [StoredDeck] { [self] + liveUnits.flatMap(\.family) }
+
+    /// Every live card in this deck and its units.
+    var allCards: [StoredCard] {
+        family.flatMap { $0.cards.filter { $0.deletedAt == nil } }
     }
 
     /// Bridge to the pure type the scheduler and queue understand.

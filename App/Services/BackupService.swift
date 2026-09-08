@@ -26,7 +26,8 @@ struct BackupService {
                     cards: deck.cards
                         .filter { $0.deletedAt == nil }
                         .sorted { $0.createdAt < $1.createdAt }
-                        .map(archived)
+                        .map(archived),
+                    parentID: deck.parent?.id
                 )
             }
         return DeckArchive(decks: decks).normalized()
@@ -85,6 +86,10 @@ struct BackupService {
                  strategy: ImportStrategy = .addAlongside) throws -> ImportSummary {
         let archive = try coder.decode(data)
         var summary = ImportSummary()
+        // Units point at their deck by id; the deck may come later in the archive, so the
+        // links are made once every deck exists.
+        var restored: [UUID: StoredDeck] = [:]
+        var wantsParent: [StoredDeck: UUID] = [:]
 
         let existingDeckIDs = Set(profile.decks.filter { $0.deletedAt == nil }.map(\.id))
 
@@ -107,6 +112,8 @@ struct BackupService {
             deck.createdAt = archivedDeck.createdAt
             context.insert(deck)
             summary.decksAdded += 1
+            restored[archivedDeck.id] = deck
+            if let parentID = archivedDeck.parentID { wantsParent[deck] = parentID }
 
             for archivedCard in archivedDeck.cards {
                 let card = StoredCard(
@@ -143,6 +150,10 @@ struct BackupService {
         }
 
         try context.save()
+        for (unit, parentID) in wantsParent {
+            unit.parent = restored[parentID]
+                ?? profile.decks.first { $0.id == parentID && $0.deletedAt == nil }
+        }
         return summary
     }
 }

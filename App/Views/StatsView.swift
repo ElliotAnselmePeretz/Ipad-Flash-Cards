@@ -9,7 +9,7 @@ struct StatsView: View {
 
     /// Cards that still count: soft-deleted ones are excluded everywhere.
     private var liveCards: [StoredCard] {
-        deck.cards.filter { $0.deletedAt == nil }
+        deck.allCards
     }
 
     private var logs: [StoredReviewLog] {

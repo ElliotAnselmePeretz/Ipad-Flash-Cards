@@ -57,6 +57,9 @@ struct RootView: View {
                 } else if ProcessInfo.processInfo.arguments.contains("-open-study"),
                           let deck = seededStudyDeck(profile) ?? profile.decks.first(where: { $0.deletedAt == nil && !$0.cards.isEmpty }) {
                     NavigationStack { StudyView(deck: deck) }
+                } else if ProcessInfo.processInfo.arguments.contains("-open-units"),
+                          let deck = profile.decks.first(where: { $0.deletedAt == nil && !$0.isUnit && !$0.cards.isEmpty }) {
+                    NavigationStack { UnitsView(deck: seededUnits(in: deck)) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-cards"),
                           let deck = profile.decks.first(where: { $0.deletedAt == nil && !$0.cards.isEmpty }) {
                     NavigationStack { CardListView(deck: deck) }
@@ -92,6 +95,17 @@ struct RootView: View {
     }
 
     private static let seedDeckName = "Seed"
+
+    /// Dev-only: UNIT_SEED="Unit 1,Unit 2" makes those units under `deck` if they are
+    /// missing, so the units screen can be looked at with something in it.
+    private func seededUnits(in deck: StoredDeck) -> StoredDeck {
+        guard let names = ProcessInfo.processInfo.environment["UNIT_SEED"] else { return deck }
+        for name in names.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) })
+        where !deck.liveUnits.contains(where: { $0.name == name }) {
+            context.insert(StoredDeck(name: name, profile: deck.profile, parent: deck))
+        }
+        return deck
+    }
 
     /// Dev-only: a throwaway deck holding one card written out from STUDY_SEED, so the
     /// study card can be looked at with real ink of a chosen length.

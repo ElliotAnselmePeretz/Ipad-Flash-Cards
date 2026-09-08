@@ -62,15 +62,18 @@ public struct ArchivedDeck: Codable, Sendable, Equatable, Identifiable {
     public var maximumReviewsPerDay: Int
     public var createdAt: Date
     public var cards: [ArchivedCard]
+    /// The deck this one is a unit of. Optional so archives written before units decode.
+    public var parentID: UUID?
 
     public init(id: UUID, name: String, newCardsPerDay: Int, maximumReviewsPerDay: Int,
-                createdAt: Date, cards: [ArchivedCard]) {
+                createdAt: Date, cards: [ArchivedCard], parentID: UUID? = nil) {
         self.id = id
         self.name = name
         self.newCardsPerDay = newCardsPerDay
         self.maximumReviewsPerDay = maximumReviewsPerDay
         self.createdAt = createdAt
         self.cards = cards
+        self.parentID = parentID
     }
 }
 

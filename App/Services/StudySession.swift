@@ -70,13 +70,13 @@ final class StudySession {
     /// nor is it harmful, and pretending it never happened would make the memory estimate
     /// lie.
     func reviewAhead(now: Date = Date()) {
-        let deckID = deck.id
+        let family = Set(deck.family.map(\.id))
         let descriptor = FetchDescriptor<StoredCard>(
             predicate: #Predicate { $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.dueDate)]
         )
         let stored = ((try? context.fetch(descriptor)) ?? [])
-            .filter { $0.deck?.id == deckID && !$0.isSuspended }
+            .filter { card in card.deck.map { family.contains($0.id) } ?? false && !card.isSuspended }
 
         queue = stored
         counts = QueueCounts(
@@ -94,12 +94,14 @@ final class StudySession {
         // Relationship traversal is deliberately kept OUT of the predicate: CoreData
         // cannot translate a chained optional keypath like `card?.deck?.id` into SQL and
         // throws at fetch time. Filter on stored columns, then narrow in Swift.
-        let deckID = deck.id
+        // A deck's session covers its units as well; a unit's covers itself alone.
+        let family = Set(deck.family.map(\.id))
         let descriptor = FetchDescriptor<StoredCard>(
             predicate: #Predicate { $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.dueDate)]
         )
-        let stored = ((try? context.fetch(descriptor)) ?? []).filter { $0.deck?.id == deckID }
+        let stored = ((try? context.fetch(descriptor)) ?? [])
+            .filter { card in card.deck.map { family.contains($0.id) } ?? false }
         let byID = Dictionary(uniqueKeysWithValues: stored.map { ($0.id, $0) })
 
         let builder = ReviewQueue(

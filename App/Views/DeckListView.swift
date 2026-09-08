@@ -13,14 +13,12 @@ struct DeckListView: View {
     @State private var newDeckName = ""
     @State private var isAddingDeck = false
     @State private var writingInto: StoredDeck?
+    @State private var unitsOf: StoredDeck?
 
     private static let estimator = MemoryEstimator()
 
     static func memory(for deck: StoredDeck, now: Date = Date()) -> MemoryEstimate {
-        estimator.estimate(
-            for: deck.cards.filter { $0.deletedAt == nil }.map(\.scheduling),
-            now: now
-        )
+        estimator.estimate(for: deck.allCards.map(\.scheduling), now: now)
     }
 
     /// Everything the screen needs about the decks, worked out in a single pass.
@@ -40,11 +38,12 @@ struct DeckListView: View {
 
     private func makeOverview(now: Date = Date()) -> Overview {
         var overview = Overview()
-        let live = profile.decks.filter { $0.deletedAt == nil }
+        // The first screen lists decks, not their units; a deck's numbers include its units.
+        let live = profile.decks.filter { $0.deletedAt == nil && !$0.isUnit }
         let startOfToday = Calendar.current.startOfDay(for: now)
 
         for deck in live {
-            let cards = deck.cards.filter { $0.deletedAt == nil }
+            let cards = deck.allCards
             // Estimated once per deck, then looked up: the sort must not recompute it.
             overview.memory[deck.id] = Self.estimator.estimate(for: cards.map(\.scheduling), now: now)
             overview.totalCards += cards.count
@@ -277,9 +276,24 @@ struct DeckListView: View {
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("Write cards in \(deck.name)")
                                 .accessibilityIdentifier("deck.write")
+
+                                // Units live one level down; this is the way in.
+                                Button {
+                                    unitsOf = deck
+                                } label: {
+                                    Image(systemName: "square.grid.2x2")
+                                        .font(.system(size: 17, weight: .medium))
+                                        .frame(width: 46, height: 46)
+                                        .background(Circle().fill(Theme.ink(scheme).opacity(0.07)))
+                                        .foregroundStyle(Theme.ink(scheme))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Units of \(deck.name)")
+                                .accessibilityIdentifier("deck.units")
                             }
                         }
                         .contextMenu {
+                            Button("Units", systemImage: "square.grid.2x2") { unitsOf = deck }
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                     deck.deletedAt = Date()
@@ -301,6 +315,9 @@ struct DeckListView: View {
             .navigationBarHidden(true)
             .navigationDestination(item: $writingInto) { deck in
                 RapidCaptureView(deck: deck)
+            }
+            .navigationDestination(item: $unitsOf) { deck in
+                UnitsView(deck: deck)
             }
             .overlay {
                 if isAddingDeck {
@@ -333,11 +350,11 @@ private struct DeckRow: View {
     var estimate: MemoryEstimate?
     @Environment(\.colorScheme) private var scheme
 
-    private var liveCards: [StoredCard] { deck.cards.filter { $0.deletedAt == nil } }
+    private var liveCards: [StoredCard] { deck.allCards }
     private var dueCount: Int { liveCards.filter { $0.dueDate <= Date() }.count }
 
     private var counts: QueueCounts {
-        ReviewQueue(deck: deck.core).counts(from: deck.cards.map(\.core))
+        ReviewQueue(deck: deck.core).counts(from: liveCards.map(\.core))
     }
 
     var body: some View {
@@ -348,6 +365,11 @@ private struct DeckRow: View {
                     Text("^[\(liveCards.count) card](inflect: true)")
                         .font(Theme.body(14))
                         .foregroundStyle(Theme.softInk(scheme))
+                    if !deck.liveUnits.isEmpty {
+                        Text("· ^[\(deck.liveUnits.count) unit](inflect: true)")
+                            .font(Theme.body(14))
+                            .foregroundStyle(Theme.softInk(scheme))
+                    }
                     if dueCount > 0 {
                         Text("\(dueCount) due")
                             .font(Theme.label(12))

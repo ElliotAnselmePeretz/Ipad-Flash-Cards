@@ -24,7 +24,7 @@ struct StudyView: View {
             Group {
                 if let session {
                     if session.stage == .finished {
-                        if deck.cards.filter({ $0.deletedAt == nil }).isEmpty {
+                        if deck.allCards.isEmpty {
                             emptyDeckView
                                 .transition(.scale(scale: 0.94).combined(with: .opacity))
                         } else {
