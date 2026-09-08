@@ -94,12 +94,24 @@ struct RootView: View {
         guard let text = ProcessInfo.processInfo.environment["STUDY_SEED"] else { return nil }
         // This is reached from `body`, which runs repeatedly: without reusing the deck it
         // made last time, every pass inserted another one.
+        let store = HandwritingStore(context: context)
+        let ink = store.compose(text, maxWidth: 680).drawing.dataRepresentation()
+
         if let existing = profile.decks.first(where: { $0.name == Self.seedDeckName && $0.deletedAt == nil }) {
+            // Written out again each launch, so a change to the composer can be seen rather
+            // than the ink from whenever the deck was first made.
+            // Only when the text itself changes: composing picks between captured samples at
+            // random, so comparing the ink would rewrite it on every pass and leave the card
+            // endlessly crossfading between two versions of itself.
+            if let card = existing.cards.first, card.frontText != text {
+                card.frontText = text
+                card.frontDrawing = ink
+            }
             return existing
         }
         let deck = StoredDeck(name: Self.seedDeckName, profile: profile)
         let card = StoredCard(deck: deck, frontText: text)
-        card.frontDrawing = HandwritingStore(context: context).compose(text, maxWidth: 680).drawing.dataRepresentation()
+        card.frontDrawing = ink
         context.insert(deck)
         context.insert(card)
         return deck

@@ -156,8 +156,13 @@ public struct HandwritingLayout: Sendable {
     /// makes writing look written.
     public var evenness: CGFloat
 
-    public init(bodyHeight: CGFloat = 44, letterSpacing: CGFloat = 0.06,
-                wordSpacing: CGFloat = 0.42, lineSpacing: CGFloat = 1.9,
+    /// Set from the captured hand rather than picked by eye: the tallest ink above the
+    /// writing line runs about 1.45 lowercase heights and the tails below it about 0.51, so
+    /// a line occupies close to two. At the old 1.9 the lines actually overlapped, and a
+    /// descender landed on the ascender beneath it. This leaves half a lowercase height of
+    /// clear paper between one line and the next.
+    public init(bodyHeight: CGFloat = 44, letterSpacing: CGFloat = 0.08,
+                wordSpacing: CGFloat = 0.6, lineSpacing: CGFloat = 2.5,
                 jitter: CGFloat = 1, evenness: CGFloat = 0.75) {
         self.bodyHeight = bodyHeight
         self.letterSpacing = letterSpacing
@@ -170,7 +175,7 @@ public struct HandwritingLayout: Sendable {
     /// Even and steady: every letter of a kind the same height, all on one line, nothing
     /// tilted or nudged. This is the neat version of the hand rather than the lively one.
     public static func tidy(bodyHeight: CGFloat = 44) -> HandwritingLayout {
-        HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.08, jitter: 0, evenness: 1)
+        HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.10, jitter: 0, evenness: 1)
     }
 
     /// The size everything else is measured against: the usual height of a plain lowercase

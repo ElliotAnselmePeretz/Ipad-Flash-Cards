@@ -240,6 +240,14 @@ final class HandwritingLayoutTests: XCTestCase {
         XCTAssertEqual(ys.count, 1, "the second word should stay on one line")
     }
 
+    /// Measured from the captured hand: ink reaches about 1.45 lowercase heights above the
+    /// writing line and 0.51 below it, so lines set less than two apart collide.
+    func testLinesDoNotCollide() {
+        let layout = HandwritingLayout(bodyHeight: 44, jitter: 0)
+        XCTAssertGreaterThan(layout.lineSpacing, 1.45 + 0.51,
+                             "a descender must not land on the ascender beneath it")
+    }
+
     func testLinesAreSpacedApart() {
         var r = rng()
         let result = steady.layout("aaaa aaaa", samples: uniformSamples(), maxWidth: 120, using: &r)
