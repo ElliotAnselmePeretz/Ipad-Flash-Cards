@@ -72,7 +72,12 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(appearance.colorScheme)
-        .task { BackupSelfTest.runIfRequested(context: context) }
+        .task {
+            BackupSelfTest.runIfRequested(context: context)
+            if let profile = profiles.first {
+                DevImport.runIfRequested(context: context, profile: profile)
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
