@@ -105,7 +105,9 @@ struct HandwritingStore {
         let ink = PKInk(.pen, color: InkColor.ink.uiColor(for: .light))
         // About the proportion of the medium pen to the letters as they were written, so the
         // composed hand is as heavy as the live one; never so fine it fades on a card.
-        let penWidth = max(1.8, bodyHeight * 0.11)
+        // PencilKit's pen washes out below roughly two and a half points: the stroke stops
+        // being ink and turns into a grey suggestion of it.
+        let penWidth = max(2.4, bodyHeight * 0.11)
 
         var strokes: [PKStroke] = []
         for placement in result.placements {
@@ -142,7 +144,7 @@ struct HandwritingStore {
     /// every few words and runs off the bottom. This picks the largest lowercase height at
     /// which the text should fit in a card's worth of lines, within sensible limits.
     static func bodyHeight(fitting text: String, in maxWidth: CGFloat,
-                           metrics: [Character: [GlyphMetrics]], maxHeight: CGFloat = 400) -> CGFloat {
+                           metrics: [Character: [GlyphMetrics]], maxHeight: CGFloat = 760) -> CGFloat {
         // The text's width at a lowercase height of 1, from the actual letters it uses.
         let reference = HandwritingLayout.reference(metrics)
         let layout = HandwritingLayout.tidy(bodyHeight: 1)
@@ -163,7 +165,9 @@ struct HandwritingStore {
         // the lot has to fit in maxHeight; explicit line breaks add lines of their own.
         let byArea = sqrt(maxHeight * maxWidth / (widthAtOne * layout.lineSpacing))
         let byLines = maxHeight / ((lines + 1) * layout.lineSpacing)
-        return min(30, max(15, min(byArea, byLines)))
+        // The floor is where letters stop being comfortable to read at arm's length, not
+        // where they stop fitting; a card that needs less than this is better scrolled.
+        return min(30, max(18, min(byArea, byLines)))
     }
 
     /// One stroke, redrawn cleanly and moved into place.
