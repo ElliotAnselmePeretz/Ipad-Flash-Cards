@@ -54,6 +54,9 @@ struct RootView: View {
                     NavigationStack { OverallProgressView(profile: profile) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-handwriting") {
                     NavigationStack { HandwritingCaptureView() }
+                } else if ProcessInfo.processInfo.arguments.contains("-open-study"),
+                          let deck = seededStudyDeck(profile) ?? profile.decks.first(where: { $0.deletedAt == nil && !$0.cards.isEmpty }) {
+                    NavigationStack { StudyView(deck: deck) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-paste"),
                           let deck = profile.decks.first(where: { $0.deletedAt == nil }) {
                     NavigationStack { PasteCardsView(deck: deck) }
@@ -78,6 +81,18 @@ struct RootView: View {
                 break
             }
         }
+    }
+
+    /// Dev-only: a throwaway deck holding one card written out from STUDY_SEED, so the
+    /// study card can be looked at with real ink of a chosen length.
+    private func seededStudyDeck(_ profile: StoredProfile) -> StoredDeck? {
+        guard let text = ProcessInfo.processInfo.environment["STUDY_SEED"] else { return nil }
+        let deck = StoredDeck(name: "Seed", profile: profile)
+        let card = StoredCard(deck: deck, frontText: text)
+        card.frontDrawing = HandwritingStore(context: context).compose(text, maxWidth: 680).drawing.dataRepresentation()
+        context.insert(deck)
+        context.insert(card)
+        return deck
     }
 
     /// Leaving the app is the natural moment to save: the day's work is done.

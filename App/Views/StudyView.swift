@@ -111,11 +111,14 @@ struct StudyView: View {
     // MARK: - The card
 
     private func studying(session: StudySession, card: StoredCard) -> some View {
+        GeometryReader { geo in
         VStack(spacing: 22) {
             Spacer(minLength: 8)
 
-            cardFace(session: session, card: card)
-                .frame(maxWidth: 720)
+            // The card takes what its ink needs, up to most of the screen: the labels,
+            // the answer buttons and a little air are what is held back.
+            cardFace(session: session, card: card, inkHeight: max(200, geo.size.height - 300))
+                .frame(maxWidth: 820)
                 .padding(.horizontal, 24)
                 // A real flip: the card turns over to show its other side.
                 .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
@@ -149,10 +152,11 @@ struct StudyView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        }
         .id(card.id)
     }
 
-    private func cardFace(session: StudySession, card: StoredCard) -> some View {
+    private func cardFace(session: StudySession, card: StoredCard, inkHeight: CGFloat) -> some View {
         WarmCard(padding: 30) {
             VStack(spacing: 16) {
                 Text(session.stage == .question ? "QUESTION" : "ANSWER")
@@ -166,8 +170,8 @@ struct StudyView: View {
                         .foregroundStyle(Theme.softInk(scheme).opacity(0.7))
                 }
 
-                side(session.stage == .question ? .front : .back, of: card)
-                    .frame(maxWidth: .infinity, minHeight: 260)
+                side(session.stage == .question ? .front : .back, of: card, inkHeight: inkHeight)
+                    .frame(maxWidth: .infinity)
             }
             // Counter-rotate the contents so text isn't mirrored mid-flip.
             .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
@@ -175,7 +179,7 @@ struct StudyView: View {
     }
 
     @ViewBuilder
-    private func side(_ which: CardFace, of card: StoredCard) -> some View {
+    private func side(_ which: CardFace, of card: StoredCard, inkHeight: CGFloat) -> some View {
         let text = which == .front ? card.frontText : card.backText
         let ink = which == .front ? card.frontDrawing : card.backDrawing
 
@@ -185,7 +189,7 @@ struct StudyView: View {
             // has been written out in the user's hand, showing both says the same thing
             // twice.
             if hasInk {
-                DrawingThumbnail(data: ink, height: 240)
+                FittedInk(data: ink, maxHeight: inkHeight)
             } else if !text.isEmpty {
                 Text(text)
                     .font(Theme.title(30))

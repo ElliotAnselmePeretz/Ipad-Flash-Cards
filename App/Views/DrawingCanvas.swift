@@ -328,15 +328,51 @@ struct DrawingThumbnail: View {
         .frame(height: height)
     }
 
+    private func render(_ drawing: PKDrawing, in bounds: CGRect) -> UIImage {
+        InkImage.render(drawing, in: bounds, dark: colorScheme == .dark)
+    }
+}
+
+enum InkImage {
     /// Rasterised with the current style, so PencilKit performs the same single dark-mode
     /// adaptation here that the live canvas does. Ink stored as black therefore shows white
-    /// on a dark page, and the thumbnail matches what was written.
-    private func render(_ drawing: PKDrawing, in bounds: CGRect) -> UIImage {
-        let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+    /// on a dark page, and the picture matches what was written.
+    static func render(_ drawing: PKDrawing, in bounds: CGRect, dark: Bool) -> UIImage {
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
         var image = UIImage()
         traits.performAsCurrent {
             image = drawing.image(from: bounds, scale: UIScreen.main.scale)
         }
         return image
+    }
+}
+
+/// Ink shown at the size it was written, giving way only when it has to.
+///
+/// A fixed-height frame made every side the same size regardless of what was on it: a
+/// one-word answer swam in space and a paragraph shrank to a smudge. This takes the ink's
+/// own size, so the card grows with what is written, and only scales down once the ink
+/// would be taller than the room the screen has for it.
+struct FittedInk: View {
+    let data: Data?
+    /// The most height the ink may take before it is scaled to fit.
+    var maxHeight: CGFloat
+    var minHeight: CGFloat = 120
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if let data, let drawing = try? PKDrawing(data: data), !drawing.bounds.isEmpty {
+            let bounds = drawing.bounds.insetBy(dx: -12, dy: -12)
+            Image(uiImage: InkImage.render(drawing, in: bounds, dark: colorScheme == .dark))
+                .resizable()
+                .scaledToFit()
+                // Never larger than written, never taller than allowed; the width is
+                // whatever the card offers, and the aspect ratio settles the rest.
+                .frame(maxWidth: bounds.width, maxHeight: min(bounds.height, maxHeight))
+                .frame(maxWidth: .infinity, minHeight: minHeight)
+        } else {
+            Color.clear.frame(height: minHeight)
+        }
     }
 }
