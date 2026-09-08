@@ -112,6 +112,8 @@ struct StudyView: View {
 
     private func studying(session: StudySession, card: StoredCard) -> some View {
         GeometryReader { geo in
+        // A GeometryReader pins its content to the top-left; without this the card sat
+        // against the left edge on a wide screen.
         VStack(spacing: 22) {
             Spacer(minLength: 8)
 
@@ -159,6 +161,7 @@ struct StudyView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .frame(width: geo.size.width, height: geo.size.height)
         }
         .id(card.id)
     }

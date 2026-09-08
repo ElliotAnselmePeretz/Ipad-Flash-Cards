@@ -183,9 +183,8 @@ public struct HandwritingLayout: Sendable {
     /// Even and steady: every letter of a kind the same height, all on one line, nothing
     /// tilted or nudged. This is the neat version of the hand rather than the lively one.
     public static func tidy(bodyHeight: CGFloat = 44) -> HandwritingLayout {
-        var layout = HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.10, jitter: 0, evenness: 1)
-        layout.alignment = .centered
-        return layout
+        // Left-aligned: centred lines were tried and read worse for a paragraph of notes.
+        HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.10, jitter: 0, evenness: 1)
     }
 
     /// The size everything else is measured against: the usual height of a plain lowercase
