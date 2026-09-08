@@ -100,6 +100,12 @@ final class StoredCard {
 
     var frontText: String = ""
     var backText: String = ""
+    /// A title read off the front's ink, for the card list only.
+    ///
+    /// Kept apart from `frontText` on purpose: that text is what the card teaches and what
+    /// the handwriting is composed from, so a misread must never end up there. This is a
+    /// label, and a wrong label costs nothing.
+    var readName: String = ""
     /// PKDrawing.dataRepresentation(). External storage keeps big ink blobs out of the
     /// main store file so card fetches stay fast.
     @Attribute(.externalStorage) var frontDrawing: Data?

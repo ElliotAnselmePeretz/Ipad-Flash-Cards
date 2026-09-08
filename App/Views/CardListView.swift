@@ -10,6 +10,7 @@ struct CardListView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editingCard: StoredCard?
     @State private var isSelecting = false
+    @State private var isNaming = false
     @State private var selection = Set<UUID>()
 
     private var cards: [StoredCard] {
@@ -90,6 +91,37 @@ struct CardListView: View {
         }
     }
 
+    /// What the list calls a card: its own words, else a title read off the writing.
+    private func title(for card: StoredCard) -> String {
+        if !card.frontText.isEmpty { return card.frontText }
+        if !card.readName.isEmpty { return card.readName }
+        return "(handwritten)"
+    }
+
+    /// Handwritten cards with no title yet.
+    private var unnamed: [StoredCard] {
+        cards.filter { $0.frontText.isEmpty && $0.readName.isEmpty && $0.frontDrawing != nil }
+    }
+
+    private func nameHandwrittenCards() {
+        isNaming = true
+        let targets = unnamed
+        Task {
+            // Recognition is slow enough to freeze the list if it runs on the main thread.
+            let names: [(StoredCard, String)] = await Task.detached(priority: .userInitiated) {
+                targets.compactMap { card in
+                    guard let ink = card.frontDrawing, let name = InkNaming.name(from: ink) else { return nil }
+                    return (card, name)
+                }
+            }.value
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                for (card, name) in names { card.readName = name }
+                try? context.save()
+                isNaming = false
+            }
+        }
+    }
+
     /// Cards with typed text on a side that has no ink yet.
     private var typedOnly: [StoredCard] {
         cards.filter { card in
@@ -140,6 +172,20 @@ struct CardListView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if !unnamed.isEmpty {
+                Section {
+                    Button {
+                        nameHandwrittenCards()
+                    } label: {
+                        Label(isNaming ? "Reading…" : "Name \(counted(unnamed.count, "handwritten card")) from the writing",
+                              systemImage: "text.viewfinder")
+                    }
+                    .disabled(isNaming)
+                } footer: {
+                    Text("Reads the front of each one for a title, so the list is not a row of "
+                         + "\"handwritten\". It is only a label — a misreading changes nothing the card teaches.")
+                }
+            }
             if !typedOnly.isEmpty, HandwritingStore(context: context).capturedCount() > 0 {
                 Section {
                     Button {
@@ -155,9 +201,10 @@ struct CardListView: View {
                 NavigationLink(value: card) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(card.frontText.isEmpty ? "(handwritten)" : card.frontText)
+                            Text(title(for: card))
                                 .font(.headline)
                                 .foregroundStyle(card.frontText.isEmpty ? .secondary : .primary)
+                                .italic(card.frontText.isEmpty && !card.readName.isEmpty)
                             HStack(spacing: 6) {
                                 Text(statusLabel(card)).font(.caption).foregroundStyle(.secondary)
                                 if card.isLeech { badge("Leech", tint: .orange) }

@@ -61,7 +61,12 @@ struct RootView: View {
                           let deck = profile.decks.first(where: { $0.deletedAt == nil && !$0.isUnit && !$0.cards.isEmpty }) {
                     NavigationStack { UnitsView(deck: seededUnits(in: deck)) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-cards"),
-                          let deck = profile.decks.first(where: { $0.deletedAt == nil && !$0.cards.isEmpty }) {
+                          let deck = profile.decks.first(where: { candidate in
+                              guard candidate.deletedAt == nil, !candidate.cards.isEmpty else { return false }
+                              // CARDS_DECK picks which one, so any deck's list can be looked at.
+                              guard let wanted = ProcessInfo.processInfo.environment["CARDS_DECK"] else { return true }
+                              return candidate.name == wanted
+                          }) {
                     NavigationStack { CardListView(deck: deck) }
                 } else if ProcessInfo.processInfo.arguments.contains("-open-paste"),
                           let deck = profile.decks.first(where: { $0.deletedAt == nil }) {

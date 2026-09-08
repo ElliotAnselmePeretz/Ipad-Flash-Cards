@@ -17,6 +17,54 @@ enum DevImport {
         if arguments.contains("-remove-cards") { removeCards(context: context, profile: profile) }
         if arguments.contains("-rewrite-handwriting") { rewriteHandwriting(context: context, profile: profile) }
         if arguments.contains("-import-cards") { importCards(context: context, profile: profile) }
+        if arguments.contains("-name-report") { nameReport(profile: profile) }
+    }
+
+    /// Scores reading a card's name off its ink against the text that made that ink.
+    ///
+    /// Cards written out from typed text are the only place the truth is known, so they are
+    /// the only honest measure of whether naming a handwritten card would work.
+    private static func nameReport(profile: StoredProfile) {
+        var scored = 0
+        var exact = 0
+        var total = 0.0
+        for deck in profile.decks where deck.deletedAt == nil {
+            for card in deck.cards where card.deletedAt == nil {
+                guard let ink = card.frontDrawing else { continue }
+                let read = InkNaming.read(ink) ?? ""
+                if card.frontText.isEmpty {
+                    print("[name] handwritten in \(deck.name): \(read.isEmpty ? "(nothing read)" : read)")
+                    continue
+                }
+                let truth = card.frontText
+                let score = similarity(read.lowercased(), truth.lowercased())
+                scored += 1
+                total += score
+                if score > 0.999 { exact += 1 }
+                if score < 0.9 {
+                    print("[name] \(Int(score * 100))%  read: \(read)")
+                    print("[name]        want: \(truth)")
+                }
+            }
+        }
+        if scored > 0 {
+            print("[name] \(scored) composed cards: \(exact) read exactly, average \(Int(total / Double(scored) * 100))% of characters")
+        }
+    }
+
+    /// How much of `want` survives in `got`, by longest common subsequence.
+    private static func similarity(_ got: String, _ want: String) -> Double {
+        let a = Array(got), b = Array(want)
+        guard !b.isEmpty else { return a.isEmpty ? 1 : 0 }
+        var previous = [Int](repeating: 0, count: b.count + 1)
+        var current = previous
+        for i in 1...max(a.count, 1) where !a.isEmpty {
+            for j in 1...b.count {
+                current[j] = a[i - 1] == b[j - 1] ? previous[j - 1] + 1 : max(previous[j], current[j - 1])
+            }
+            swap(&previous, &current)
+        }
+        return Double(previous[b.count]) / Double(b.count)
     }
 
     /// Soft-deletes typed cards in a deck whose question matches a pattern.
