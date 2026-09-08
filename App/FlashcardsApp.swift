@@ -83,11 +83,18 @@ struct RootView: View {
         }
     }
 
+    private static let seedDeckName = "Seed"
+
     /// Dev-only: a throwaway deck holding one card written out from STUDY_SEED, so the
     /// study card can be looked at with real ink of a chosen length.
     private func seededStudyDeck(_ profile: StoredProfile) -> StoredDeck? {
         guard let text = ProcessInfo.processInfo.environment["STUDY_SEED"] else { return nil }
-        let deck = StoredDeck(name: "Seed", profile: profile)
+        // This is reached from `body`, which runs repeatedly: without reusing the deck it
+        // made last time, every pass inserted another one.
+        if let existing = profile.decks.first(where: { $0.name == Self.seedDeckName && $0.deletedAt == nil }) {
+            return existing
+        }
+        let deck = StoredDeck(name: Self.seedDeckName, profile: profile)
         let card = StoredCard(deck: deck, frontText: text)
         card.frontDrawing = HandwritingStore(context: context).compose(text, maxWidth: 680).drawing.dataRepresentation()
         context.insert(deck)

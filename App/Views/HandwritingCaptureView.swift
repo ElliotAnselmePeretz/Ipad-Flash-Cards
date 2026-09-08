@@ -215,6 +215,10 @@ struct HandwritingCaptureView: View {
                 .frame(maxWidth: 420)
 
             preview
+                .task(id: store.capturedCount()) {
+                    previewInk = store.compose("the quick brown fox", maxWidth: 520)
+                        .drawing.dataRepresentation()
+                }
                 .frame(maxWidth: 560)
                 .padding(.top, 4)
 
@@ -230,6 +234,9 @@ struct HandwritingCaptureView: View {
     }
 
     /// Shows the library actually composing something, so it can be judged before use.
+    /// Written out once when the alphabet is finished, not on every pass through `body`.
+    @State private var previewInk: Data?
+
     private var preview: some View {
         WarmCard(padding: 18) {
             VStack(alignment: .leading, spacing: 8) {
@@ -237,11 +244,7 @@ struct HandwritingCaptureView: View {
                     .font(Theme.label(11))
                     .tracking(1.4)
                     .foregroundStyle(Theme.softInk(scheme))
-                DrawingThumbnail(
-                    data: store.compose("the quick brown fox", maxWidth: 520)
-                        .drawing.dataRepresentation(),
-                    height: 90
-                )
+                DrawingThumbnail(data: previewInk, height: 90)
             }
         }
     }

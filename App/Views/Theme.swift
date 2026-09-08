@@ -141,16 +141,24 @@ struct SoftGlow: ViewModifier {
             .background(
                 // Inset negatively and blurred hard, so the halo actually escapes from
                 // behind an opaque card instead of being hidden by it.
+                //
+                // Rasterised once with `drawingGroup`, and only its opacity breathes. The
+                // blur used to be recomputed on every frame of a forever-repeating
+                // animation — a 30 point Gaussian, redrawn sixty times a second for as long
+                // as the screen was open, which pinned a core and drained the battery.
+                // Scaling the layer was what forced the redraw; fading a finished picture
+                // in and out costs nothing.
                 RoundedRectangle(cornerRadius: Theme.corner + 10, style: .continuous)
                     .fill(color)
                     .padding(-14)
                     .blur(radius: 30)
+                    .drawingGroup()
                     .opacity(active ? (pulse ? maxOpacity : maxOpacity * 0.45) : 0)
-                    .scaleEffect(pulse ? 1.03 : 1.0)
-                    .animation(.easeInOut(duration: 3).repeatForever(autoreverses: true), value: pulse)
+                    .animation(active ? .easeInOut(duration: 3).repeatForever(autoreverses: true) : nil,
+                               value: pulse)
                     .allowsHitTesting(false)
             )
-            .onAppear { pulse = true }
+            .onAppear { if active { pulse = true } }
     }
 }
 

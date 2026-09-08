@@ -261,8 +261,10 @@ private final class MenulessCanvasView: PKCanvasView {
     override func layoutSubviews() {
         super.layoutSubviews()
         stripEditMenu()
-        fitContentToDrawing()
     }
+
+    /// The ink this content size was worked out for, so identical ink is measured once.
+    private var measured: PKDrawing?
 
     /// Lets the page scroll to wherever the ink goes.
     ///
@@ -271,6 +273,11 @@ private final class MenulessCanvasView: PKCanvasView {
     /// the space the screen gives the canvas, so the bottom of a long answer was simply
     /// cut off with no way to reach it.
     func fitContentToDrawing() {
+        // `drawing.bounds` re-interpolates every stroke, so this must never run on a plain
+        // layout pass: setting contentSize triggers another layout, and the two together
+        // spin a core for as long as the canvas is on screen.
+        if let measured, measured == drawing { return }
+        measured = drawing
         let margin: CGFloat = 60
         let ink = drawing.bounds
         let needed = CGSize(width: max(bounds.width, ink.isEmpty ? 0 : ink.maxX + margin),
@@ -313,10 +320,10 @@ struct DrawingThumbnail: View {
 
     var body: some View {
         GeometryReader { geo in
-            if let data, let drawing = try? PKDrawing(data: data), !drawing.bounds.isEmpty {
-                let bounds = drawing.bounds
+            if let data, let picture = InkImage.picture(of: data, dark: colorScheme == .dark) {
+                let bounds = picture.bounds
                 let scale = min(geo.size.width / bounds.width, geo.size.height / bounds.height, 1)
-                Image(uiImage: render(drawing, in: bounds))
+                Image(uiImage: picture.image)
                     .resizable()
                     .scaledToFit()
                     .frame(width: bounds.width * scale, height: bounds.height * scale)
@@ -328,9 +335,6 @@ struct DrawingThumbnail: View {
         .frame(height: height)
     }
 
-    private func render(_ drawing: PKDrawing, in bounds: CGRect) -> UIImage {
-        InkImage.render(drawing, in: bounds, dark: colorScheme == .dark)
-    }
 }
 
 enum InkImage {
@@ -344,6 +348,35 @@ enum InkImage {
             image = drawing.image(from: bounds, scale: UIScreen.main.scale)
         }
         return image
+    }
+
+    final class Picture {
+        let image: UIImage
+        let bounds: CGRect
+        init(image: UIImage, bounds: CGRect) {
+            self.image = image
+            self.bounds = bounds
+        }
+    }
+
+    private static let light = NSCache<NSData, Picture>()
+    private static let dark = NSCache<NSData, Picture>()
+
+    /// A picture of some ink, kept so it is drawn once rather than once a frame.
+    ///
+    /// Decoding a `PKDrawing`, measuring its bounds and rasterising it are all expensive —
+    /// bounds especially, since PencilKit re-interpolates every stroke to find them. A
+    /// SwiftUI body runs on every state change and on every frame of an animation, so doing
+    /// this work inside one pins a core for as long as the view is on screen.
+    static func picture(of data: Data, dark isDark: Bool) -> Picture? {
+        let cache = isDark ? dark : light
+        let key = data as NSData
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let drawing = try? PKDrawing(data: data), !drawing.bounds.isEmpty else { return nil }
+        let bounds = drawing.bounds.insetBy(dx: -12, dy: -12)
+        let picture = Picture(image: render(drawing, in: bounds, dark: isDark), bounds: bounds)
+        cache.setObject(picture, forKey: key)
+        return picture
     }
 }
 
@@ -362,14 +395,14 @@ struct FittedInk: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if let data, let drawing = try? PKDrawing(data: data), !drawing.bounds.isEmpty {
-            let bounds = drawing.bounds.insetBy(dx: -12, dy: -12)
-            Image(uiImage: InkImage.render(drawing, in: bounds, dark: colorScheme == .dark))
+        if let data, let picture = InkImage.picture(of: data, dark: colorScheme == .dark) {
+            Image(uiImage: picture.image)
                 .resizable()
                 .scaledToFit()
                 // Never larger than written, never taller than allowed; the width is
                 // whatever the card offers, and the aspect ratio settles the rest.
-                .frame(maxWidth: bounds.width, maxHeight: min(bounds.height, maxHeight))
+                .frame(maxWidth: picture.bounds.width,
+                       maxHeight: min(picture.bounds.height, maxHeight))
                 .frame(maxWidth: .infinity, minHeight: minHeight)
         } else {
             Color.clear.frame(height: minHeight)

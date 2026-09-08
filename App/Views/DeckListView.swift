@@ -23,39 +23,52 @@ struct DeckListView: View {
         )
     }
 
-    /// Ordered by what you are closest to forgetting, so the deck that needs you is first.
-    /// Decks with nothing studied yet sort last: there is nothing to lose there.
-    private var decks: [StoredDeck] {
-        profile.decks
-            .filter { $0.deletedAt == nil }
-            .sorted { a, b in
-                let ma = Self.memory(for: a), mb = Self.memory(for: b)
-                if ma.isEmpty != mb.isEmpty { return !ma.isEmpty }
-                if ma.recallProbability != mb.recallProbability {
-                    return ma.recallProbability < mb.recallProbability
+    /// Everything the screen needs about the decks, worked out in a single pass.
+    ///
+    /// This used to be four computed properties that each walked every card, and a sort
+    /// whose comparator ran the memory estimate afresh on both sides of every comparison.
+    /// A view body runs far more often than it looks — on every frame of an animation —
+    /// so that arrangement re-ran the whole FSRS estimate for the library dozens of times
+    /// a second and pinned a core for as long as the screen was open.
+    struct Overview {
+        var decks: [StoredDeck] = []
+        var memory: [UUID: MemoryEstimate] = [:]
+        var dueNow = 0
+        var totalCards = 0
+        var reviewedToday = 0
+    }
+
+    private func makeOverview(now: Date = Date()) -> Overview {
+        var overview = Overview()
+        let live = profile.decks.filter { $0.deletedAt == nil }
+        let startOfToday = Calendar.current.startOfDay(for: now)
+
+        for deck in live {
+            let cards = deck.cards.filter { $0.deletedAt == nil }
+            // Estimated once per deck, then looked up: the sort must not recompute it.
+            overview.memory[deck.id] = Self.estimator.estimate(for: cards.map(\.scheduling), now: now)
+            overview.totalCards += cards.count
+            for card in cards {
+                if card.dueDate <= now { overview.dueNow += 1 }
+                for log in card.reviewLogs where log.reviewedAt >= startOfToday {
+                    overview.reviewedToday += 1
                 }
+            }
+        }
+
+        // Ordered by what you are closest to forgetting, so the deck that needs you is
+        // first. Decks with nothing studied yet sort last: there is nothing to lose there.
+        overview.decks = live.sorted { a, b in
+            guard let ma = overview.memory[a.id], let mb = overview.memory[b.id] else {
                 return a.createdAt < b.createdAt
             }
-    }
-
-    /// Totals across every deck, so the first screen says something rather than being a
-    /// bare list. Due-now is the number that decides whether you study at all.
-    private var dueNow: Int {
-        decks.reduce(0) { total, deck in
-            total + deck.cards.filter { $0.deletedAt == nil && $0.dueDate <= Date() }.count
+            if ma.isEmpty != mb.isEmpty { return !ma.isEmpty }
+            if ma.recallProbability != mb.recallProbability {
+                return ma.recallProbability < mb.recallProbability
+            }
+            return a.createdAt < b.createdAt
         }
-    }
-
-    private var totalCards: Int {
-        decks.reduce(0) { $0 + $1.cards.filter { $0.deletedAt == nil }.count }
-    }
-
-    private var reviewedToday: Int {
-        let start = Calendar.current.startOfDay(for: Date())
-        return decks.reduce(0) { total, deck in
-            total + deck.cards.filter { $0.deletedAt == nil }
-                .reduce(0) { $0 + $1.reviewLogs.filter { $0.reviewedAt >= start }.count }
-        }
+        return overview
     }
 
     private func cycleAppearance() {
@@ -165,8 +178,9 @@ struct DeckListView: View {
     }
 
     @ViewBuilder
-    private var summaryHeader: some View {
-        if !decks.isEmpty {
+    private func summaryHeader(_ overview: Overview) -> some View {
+        Group {
+        if !overview.decks.isEmpty {
             WarmCard(padding: 18) {
                 VStack(spacing: 14) {
                     HStack {
@@ -174,9 +188,9 @@ struct DeckListView: View {
                             Text(greeting)
                                 .font(Theme.display(24))
                                 .foregroundStyle(Theme.ink(scheme))
-                            Text(dueNow == 0
+                            Text(overview.dueNow == 0
                                  ? "Nothing due right now."
-                                 : "^[\(dueNow) card](inflect: true) waiting for you.")
+                                 : "^[\(overview.dueNow) card](inflect: true) waiting for you.")
                                 .font(Theme.body(15))
                                 .foregroundStyle(Theme.softInk(scheme))
                         }
@@ -184,20 +198,23 @@ struct DeckListView: View {
                     }
 
                     HStack(spacing: 10) {
-                        StatChip(value: "\(dueNow)", label: "due now", tint: Theme.accent(scheme))
-                        StatChip(value: "\(reviewedToday)", label: "done today", tint: Theme.easy(scheme))
-                        StatChip(value: "\(totalCards)", label: "cards", tint: nil)
+                        StatChip(value: "\(overview.dueNow)", label: "due now", tint: Theme.accent(scheme))
+                        StatChip(value: "\(overview.reviewedToday)", label: "done today", tint: Theme.easy(scheme))
+                        StatChip(value: "\(overview.totalCards)", label: "cards", tint: nil)
                     }
                 }
             }
             // A faint halo when something is actually waiting, and none when it is not.
-            .softGlow(Theme.glow(scheme), active: dueNow > 0, maxOpacity: 0.6)
-            .animation(.easeInOut(duration: 0.5), value: dueNow)
+            .softGlow(Theme.glow(scheme), active: overview.dueNow > 0, maxOpacity: 0.6)
+            .animation(.easeInOut(duration: 0.5), value: overview.dueNow)
+        }
         }
     }
 
     var body: some View {
-        NavigationStack {
+        // Worked out once for the whole pass, then handed down.
+        let overview = makeOverview()
+        return NavigationStack {
             VStack(spacing: 0) {
                 AppHeader(title: "Decks") {
                     HeaderButton(symbol: "circle.lefthalf.filled", label: "Appearance") {
@@ -223,7 +240,7 @@ struct DeckListView: View {
                     NavigationLink {
                         OverallProgressView(profile: profile)
                     } label: {
-                        summaryHeader
+                        summaryHeader(overview)
                     }
                     .buttonStyle(.plain)
 
@@ -235,13 +252,13 @@ struct DeckListView: View {
                     .buttonStyle(.plain)
                     .padding(.bottom, 4)
 
-                    ForEach(Array(decks.enumerated()), id: \.element.id) { index, deck in
+                    ForEach(Array(overview.decks.enumerated()), id: \.element.id) { index, deck in
                         WarmCard(padding: 18) {
                             HStack(spacing: 14) {
                                 NavigationLink {
                                     StudyView(deck: deck)
                                 } label: {
-                                    DeckRow(deck: deck)
+                                    DeckRow(deck: deck, estimate: overview.memory[deck.id])
                                 }
                                 .buttonStyle(.plain)
 
@@ -273,7 +290,7 @@ struct DeckListView: View {
                         // Decks fan in on appearance rather than snapping into place.
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .animation(.spring(response: 0.45, dampingFraction: 0.82)
-                                    .delay(Double(index) * 0.04), value: decks.count)
+                                    .delay(Double(index) * 0.04), value: overview.decks.count)
                     }
                 }
                     .padding(20)
@@ -301,7 +318,7 @@ struct DeckListView: View {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isAddingDeck)
             .overlay {
-                if decks.isEmpty {
+                if overview.decks.isEmpty {
                     EmptyDecksView(onAddSample: addSampleDeck)
                 }
             }
@@ -312,6 +329,8 @@ struct DeckListView: View {
 
 private struct DeckRow: View {
     let deck: StoredDeck
+    /// Passed in from the screen's single pass, rather than estimated again per row.
+    var estimate: MemoryEstimate?
     @Environment(\.colorScheme) private var scheme
 
     private var liveCards: [StoredCard] { deck.cards.filter { $0.deletedAt == nil } }
@@ -340,7 +359,7 @@ private struct DeckRow: View {
                             .foregroundStyle(Theme.accent(scheme))
                     }
                 }
-                MemoryBar(estimate: DeckListView.memory(for: deck))
+                MemoryBar(estimate: estimate ?? DeckListView.memory(for: deck))
                     .padding(.top, 1)
             }
             Spacer()

@@ -24,7 +24,13 @@ struct PasteCardsView: View {
     private var handwriting: HandwritingStore { HandwritingStore(context: context) }
     private var canWrite: Bool { handwriting.capturedCount() > 0 }
 
-    private var parsed: PastedCards { PastedCardParser.parse(text) }
+    /// Worked out when the text changes rather than in `body`.
+    ///
+    /// Parsing, composing handwriting and fetching the glyph library are all far too heavy
+    /// to sit in a view body, which runs on every keystroke and every frame of an animation.
+    @State private var parsed = PastedCards(cards: [], format: .empty)
+    @State private var preview: (question: Data?, answer: Data?) = (nil, nil)
+    @State private var missing: [Character] = []
 
     private var existingQuestions: Set<String> {
         Set(deck.cards.filter { $0.deletedAt == nil }.map { $0.frontText.lowercased() })
@@ -38,12 +44,20 @@ struct PasteCardsView: View {
 
     private var duplicates: Int { parsed.cards.count - cards.count }
 
-    /// Letters the text needs that have not been captured.
-    private var missing: [Character] {
-        guard inMyHand, canWrite else { return [] }
+    /// Reads the text, and writes out the first card so it can be seen before committing.
+    private func reread() {
+        parsed = PastedCardParser.parse(text)
+        guard inMyHand, canWrite, let first = cards.first else {
+            preview = (nil, nil)
+            missing = []
+            return
+        }
+        preview = (handwriting.compose(first.question, maxWidth: 640).drawing.dataRepresentation(),
+                   first.answer.isEmpty ? nil
+                    : handwriting.compose(first.answer, maxWidth: 640).drawing.dataRepresentation())
         let have = Set(handwriting.samples().keys)
         let needed = Set(cards.flatMap { ($0.question + $0.answer) }.filter { !$0.isWhitespace })
-        return needed.subtracting(have).sorted()
+        missing = needed.subtracting(have).sorted()
     }
 
     var body: some View {
@@ -54,7 +68,7 @@ struct PasteCardsView: View {
                 VStack(spacing: 16) {
                     editor
                     if !text.isEmpty { reading }
-                    if let first = cards.first, inMyHand, canWrite { preview(first) }
+                    if preview.question != nil { previewCard }
                     options
                 }
                 .frame(maxWidth: 760)
@@ -81,7 +95,10 @@ struct PasteCardsView: View {
             if text.isEmpty, let seeded = ProcessInfo.processInfo.environment["PASTE_TEXT"] {
                 text = seeded
             }
+            reread()
         }
+        .onChange(of: text) { _, _ in reread() }
+        .onChange(of: inMyHand) { _, _ in reread() }
     }
 
     // MARK: - Pieces
@@ -134,19 +151,17 @@ struct PasteCardsView: View {
         duplicates > 0 ? " · \(duplicates) already in this deck" : ""
     }
 
-    private func preview(_ card: PastedCard) -> some View {
+    private var previewCard: some View {
         WarmCard(padding: 18) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("FIRST CARD, IN YOUR HAND")
                     .font(Theme.label(11))
                     .tracking(1.4)
                     .foregroundStyle(Theme.softInk(scheme))
-                DrawingThumbnail(data: handwriting.compose(card.question, maxWidth: 640).drawing.dataRepresentation(),
-                                 height: 70)
-                if !card.answer.isEmpty {
+                DrawingThumbnail(data: preview.question, height: 70)
+                if let answer = preview.answer {
                     Rectangle().fill(Theme.softInk(scheme).opacity(0.15)).frame(height: 1)
-                    DrawingThumbnail(data: handwriting.compose(card.answer, maxWidth: 640).drawing.dataRepresentation(),
-                                     height: 200)
+                    DrawingThumbnail(data: answer, height: 200)
                 }
                 if !missing.isEmpty {
                     Text("Not in your alphabet yet, so left out: \(missing.map(String.init).joined(separator: " "))")
