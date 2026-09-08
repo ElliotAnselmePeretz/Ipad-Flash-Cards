@@ -126,11 +126,18 @@ struct StudyView: View {
                 // The tap layer sits outside the 3D transform on purpose: hit-testing
                 // through a rotation3DEffect is unreliable, and putting it inside meant
                 // the gesture was swallowed by the animation it was supposed to start.
+                // A tap turns the card over, whichever side is up. The first tap also
+                // reveals the answer for grading; after that it just flips back and forth,
+                // so the question can be re-read without hunting for a button.
                 .onFingertipTap {
-                    if session.stage == .question { reveal(session) }
+                    if session.stage == .question {
+                        reveal(session)
+                    } else {
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) { flipped.toggle() }
+                    }
                 }
-                .accessibilityAddTraits(session.stage == .question ? .isButton : [])
-                .accessibilityHint(session.stage == .question ? "Tap to show the answer" : "")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(session.stage == .question ? "Tap to show the answer" : "Tap to turn the card over")
 
             Spacer(minLength: 8)
 
@@ -159,18 +166,18 @@ struct StudyView: View {
     private func cardFace(session: StudySession, card: StoredCard, inkHeight: CGFloat) -> some View {
         WarmCard(padding: 30) {
             VStack(spacing: 16) {
-                Text(session.stage == .question ? "QUESTION" : "ANSWER")
+                Text(flipped ? "ANSWER" : "QUESTION")
                     .font(Theme.label(11))
                     .tracking(1.4)
                     .foregroundStyle(Theme.softInk(scheme))
 
-                if session.stage == .question {
-                    Text("Tap the card to show the answer")
-                        .font(Theme.body(12))
-                        .foregroundStyle(Theme.softInk(scheme).opacity(0.7))
-                }
+                Text(session.stage == .question ? "Tap the card to show the answer" : "Tap to turn it over")
+                    .font(Theme.body(12))
+                    .foregroundStyle(Theme.softInk(scheme).opacity(0.7))
 
-                side(session.stage == .question ? .front : .back, of: card, inkHeight: inkHeight)
+                // The face follows the flip, not the stage: once revealed, the card can be
+                // turned back to the question and over again while grading.
+                side(flipped ? .back : .front, of: card, inkHeight: inkHeight)
                     .frame(maxWidth: .infinity)
             }
             // Counter-rotate the contents so text isn't mirrored mid-flip.

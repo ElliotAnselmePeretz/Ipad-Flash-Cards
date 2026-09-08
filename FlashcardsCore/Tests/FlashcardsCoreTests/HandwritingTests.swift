@@ -208,6 +208,36 @@ final class HandwritingLayoutTests: XCTestCase {
         XCTAssertEqual(Set(result.placements.map(\.origin.y)).count, 1)
     }
 
+    // MARK: - Alignment
+
+    func testCentredLinesSitInTheMiddleOfTheWidth() {
+        var layout = HandwritingLayout(bodyHeight: 44, jitter: 0)
+        layout.alignment = .centered
+        var r = rng()
+        let result = layout.layout("ab", samples: uniformSamples(), maxWidth: 1000, using: &r)
+        let left = result.placements[0].origin.x
+        let right = result.placements[1].origin.x + 30 * result.placements[1].scale
+        XCTAssertEqual(left, 1000 - right, accuracy: 0.5, "equal margins either side")
+        XCTAssertGreaterThan(left, 400)
+    }
+
+    func testEachWrappedLineIsCentredOnItsOwn() {
+        var layout = HandwritingLayout(bodyHeight: 44, jitter: 0)
+        layout.alignment = .centered
+        var r = rng()
+        let result = layout.layout("aaaa a", samples: uniformSamples(), maxWidth: 160, using: &r)
+        let lastLine = result.placements.filter { $0.origin.y == result.placements.last!.origin.y }
+        XCTAssertEqual(lastLine.count, 1)
+        XCTAssertEqual(lastLine[0].origin.x, (160 - 30) / 2, accuracy: 0.5,
+                       "a short last line is centred, not left behind at the margin")
+    }
+
+    func testLeadingIsStillTheDefault() {
+        var r = rng()
+        let result = steady.layout("ab", samples: uniformSamples(), maxWidth: 1000, using: &r)
+        XCTAssertEqual(result.placements[0].origin.x, 0)
+    }
+
     // MARK: - Line breaks
 
     func testANewlineStartsANewLine() {

@@ -12,6 +12,9 @@ public enum HandwritingAlphabet {
         + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         + "0123456789"
         + ".,'?!:;-()/&+="
+        // Added later, so they come after the original set and an existing alphabet only
+        // has these left to capture: arrows and the marks Desmos and code notes lean on.
+        + "<>[]^~*%\""
     )
 
     public static var count: Int { characters.count }
@@ -148,6 +151,11 @@ public struct HandwritingLayout: Sendable {
     public var lineSpacing: CGFloat
     /// How much each glyph may vary, 0 for none.
     public var jitter: CGFloat
+    /// Where each line sits within the width it was given.
+    public enum Alignment: Sendable, Equatable { case leading, centered }
+    /// Centred lines read as a card; ragged-left reads as a page of notes.
+    public var alignment: Alignment = .leading
+
     /// How strongly letters of the same class are pulled towards a common size.
     ///
     /// Capturing one letter at a time invites drift — the same hand writes `x` half the
@@ -175,7 +183,9 @@ public struct HandwritingLayout: Sendable {
     /// Even and steady: every letter of a kind the same height, all on one line, nothing
     /// tilted or nudged. This is the neat version of the hand rather than the lively one.
     public static func tidy(bodyHeight: CGFloat = 44) -> HandwritingLayout {
-        HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.10, jitter: 0, evenness: 1)
+        var layout = HandwritingLayout(bodyHeight: bodyHeight, letterSpacing: 0.10, jitter: 0, evenness: 1)
+        layout.alignment = .centered
+        return layout
     }
 
     /// The size everything else is measured against: the usual height of a plain lowercase
@@ -250,19 +260,28 @@ public struct HandwritingLayout: Sendable {
         var pen = CGPoint(x: 0, y: ascent)      // y is the writing line, not the top of the ink
         var widest: CGFloat = 0
 
+        // Which line each placement landed on, so lines can be centred once they are full.
+        var lineOf: [Int] = []
+        var line = 0
+        var lineRight: [CGFloat] = []
+        func newLine() {
+            pen = CGPoint(x: 0, y: pen.y + lineHeight)
+            line += 1
+        }
+
         // A line break in the text is a line break on the page; within a paragraph, break
         // on words so a line never splits one in half.
         let paragraphs = text.replacingOccurrences(of: "\r\n", with: "\n")
             .split(separator: "\n", omittingEmptySubsequences: false)
         for (paragraphIndex, paragraph) in paragraphs.enumerated() {
-        if paragraphIndex > 0 { pen = CGPoint(x: 0, y: pen.y + lineHeight) }
+        if paragraphIndex > 0 { newLine() }
         for (wordIndex, word) in paragraph.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
             let wordWidth = width(of: String(word), samples: samples,
                                   gap: gap, base: base, medians: medians)
 
             if wordIndex > 0 {
                 if pen.x + space + wordWidth > maxWidth, pen.x > 0 {
-                    pen = CGPoint(x: 0, y: pen.y + lineHeight)
+                    newLine()
                 } else {
                     pen.x += space
                 }
@@ -280,7 +299,7 @@ public struct HandwritingLayout: Sendable {
                 let drawnWidth = metrics.width * scale
 
                 if pen.x + drawnWidth > maxWidth, pen.x > 0 {
-                    pen = CGPoint(x: 0, y: pen.y + lineHeight)
+                    newLine()
                 }
 
                 let wobble = jitter == 0 ? (scale: CGFloat(1), rotation: CGFloat(0), lift: CGFloat(0))
@@ -301,10 +320,21 @@ public struct HandwritingLayout: Sendable {
                     rotation: wobble.rotation
                 ))
 
+                lineOf.append(line)
+                while lineRight.count <= line { lineRight.append(0) }
+                lineRight[line] = pen.x + drawnWidth
+
                 pen.x += drawnWidth + gap
                 widest = max(widest, pen.x)
             }
         }
+        }
+
+        if alignment == .centered {
+            for (index, which) in lineOf.enumerated() {
+                placements[index].origin.x += (maxWidth - lineRight[which]) / 2
+            }
+            widest = placements.isEmpty ? 1 : maxWidth
         }
 
         return Result(
