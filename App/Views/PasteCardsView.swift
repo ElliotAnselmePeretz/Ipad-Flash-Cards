@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 import PencilKit
 import FlashcardsCore
 
@@ -31,6 +32,9 @@ struct PasteCardsView: View {
     @State private var parsed = PastedCards(cards: [], format: .empty)
     @State private var preview: (question: Data?, answer: Data?) = (nil, nil)
     @State private var missing: [Character] = []
+    @State private var chosenPhotos: [PhotosPickerItem] = []
+    @State private var isReading = false
+    @State private var readingProblem: String?
 
     private var existingQuestions: Set<String> {
         Set(deck.cards.filter { $0.deletedAt == nil }.map { $0.frontText.lowercased() })
@@ -67,6 +71,22 @@ struct PasteCardsView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     editor
+                    if isReading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Reading the screenshots…")
+                                .font(Theme.body(14))
+                                .foregroundStyle(Theme.softInk(scheme))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 6)
+                    }
+                    if let readingProblem {
+                        Text(readingProblem)
+                            .font(Theme.body(13))
+                            .foregroundStyle(Theme.hard(scheme))
+                            .padding(.horizontal, 6)
+                    }
                     if !text.isEmpty { reading }
                     if preview.question != nil { previewCard }
                     options
@@ -80,6 +100,10 @@ struct PasteCardsView: View {
         }
         .safeAreaInset(edge: .top) {
             AppHeader(title: "Paste cards", subtitle: deck.name, onBack: { dismiss() }) {
+                PhotosPicker(selection: $chosenPhotos, matching: .images, photoLibrary: .shared()) {
+                    HeaderGlyph(symbol: "text.viewfinder", label: "Read screenshots")
+                }
+                .accessibilityIdentifier("paste.photos")
                 HeaderButton(symbol: "doc.on.clipboard", label: "Paste from clipboard") {
                     if let clip = UIPasteboard.general.string { text = clip }
                 }
@@ -95,9 +119,21 @@ struct PasteCardsView: View {
             if text.isEmpty, let seeded = ProcessInfo.processInfo.environment["PASTE_TEXT"] {
                 text = seeded
             }
+            // Dev seam: the photo picker cannot be driven from a test, so a picture can be
+            // handed straight to the same recognition path.
+            if text.isEmpty, let path = ProcessInfo.processInfo.environment["SCAN_IMAGE"],
+               let image = UIImage(contentsOfFile: path) {
+                text = await Task.detached(priority: .userInitiated) {
+                    TextFromImages.studyText(from: [image])
+                }.value
+            }
             reread()
         }
         .onChange(of: text) { _, _ in reread() }
+        .onChange(of: chosenPhotos) { _, picked in
+            guard !picked.isEmpty else { return }
+            Task { await readPhotos(picked) }
+        }
         .onChange(of: inMyHand) { _, _ in reread() }
     }
 
@@ -107,7 +143,7 @@ struct PasteCardsView: View {
         WarmCard(padding: 16) {
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
-                    Text("Paste questions and answers here.\n\nQUESTION: … / ANSWER: … lines, an Anki export, two columns, or a blank line between each pair — all work.")
+                    Text("Paste questions and answers here, or tap the scan button above to read them off screenshots.\n\nQUESTION: … / ANSWER: … lines, an Anki export, two columns, or a blank line between each pair — all work.")
                         .font(Theme.body(15))
                         .foregroundStyle(Theme.softInk(scheme).opacity(0.6))
                         .padding(.top, 8)
@@ -200,6 +236,38 @@ struct PasteCardsView: View {
         .padding(.bottom, 14)
         .background(Theme.page(scheme))
         .accessibilityIdentifier("paste.add")
+    }
+
+    /// Reads the chosen pictures and adds what they say to whatever is already here.
+    ///
+    /// Recognition runs off the main thread: a page of text takes long enough that doing it
+    /// inline would freeze the screen mid-tap.
+    private func readPhotos(_ picked: [PhotosPickerItem]) async {
+        isReading = true
+        readingProblem = nil
+        defer { isReading = false; chosenPhotos = [] }
+
+        var images: [UIImage] = []
+        for item in picked {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                images.append(image)
+            }
+        }
+        guard !images.isEmpty else {
+            readingProblem = "Those could not be opened as pictures."
+            return
+        }
+
+        let scanned = await Task.detached(priority: .userInitiated) {
+            TextFromImages.studyText(from: images)
+        }.value
+
+        guard !scanned.isEmpty else {
+            readingProblem = "No words could be read from \(counted(images.count, "screenshot"))."
+            return
+        }
+        text = text.isEmpty ? scanned : text + "\n\n" + scanned
     }
 
     // MARK: - Actions
