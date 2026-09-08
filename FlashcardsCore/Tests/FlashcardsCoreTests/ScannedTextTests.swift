@@ -83,6 +83,46 @@ final class ScannedTextTests: XCTestCase {
                        "An area of land drained by a river and its\ntributaries, bounded by a watershed.")
     }
 
+    /// A glossary: one line per term, nothing set larger, the colon doing the work.
+    /// Measured by recognising a rendered page of it.
+    func testAGlossaryOfTermAndMeaningBecomesOneCardEach() {
+        let lines = page([
+            ("Osmosis: movement of water across a partially permeable membrane.", 0.00970),
+            ("Diffusion: movement of particles from high to low concentration.", 0.00890),
+            ("Active transport: movement against a gradient, using energy.", 0.00916),
+            ("Mitosis: cell division producing two identical daughter cells.", 0.00851),
+        ])
+        let cards = PastedCardParser.parse(ScannedText.studyText(from: lines))
+        XCTAssertEqual(cards.cards.map(\.question),
+                       ["Osmosis", "Diffusion", "Active transport", "Mitosis"])
+        XCTAssertEqual(cards.cards[0].answer,
+                       "movement of water across a partially permeable membrane.")
+    }
+
+    /// Capitals mark the heading where type size does not.
+    func testHeadingsShoutedInCapitalsAreStillHeadings() {
+        let lines = page([
+            ("OSMOSIS", 0.01371), ("Movement of water across a membrane.", 0.01005),
+            ("DIFFUSION", 0.01213), ("High to low concentration.", 0.00900),
+            ("MITOSIS", 0.01186), ("Two identical daughter cells.", 0.00887),
+        ])
+        let cards = PastedCardParser.parse(ScannedText.studyText(from: lines))
+        XCTAssertEqual(cards.cards.map(\.question), ["OSMOSIS", "DIFFUSION", "MITOSIS"])
+    }
+
+    /// A sentence that happens to contain a colon is not a definition, and a page of prose
+    /// must not be shredded into a card per line.
+    func testProseWithColonsIsNotTreatedAsAGlossary() {
+        let lines = page([
+            ("The cycle has three stages: evaporation, condensation and precipitation.", 0.009),
+            ("Water moves between stores continuously.", 0.009),
+            ("It is driven by energy from the sun.", 0.009),
+        ])
+        let cards = PastedCardParser.parse(ScannedText.studyText(from: lines))
+        XCTAssertEqual(cards.cards.count, 1,
+                       "one long line with a colon in it is not a term and its meaning")
+    }
+
     func testAnEmptyScanIsSafe() {
         XCTAssertEqual(ScannedText.studyText(from: []), "")
         XCTAssertEqual(ScannedText.studyText(fromPages: [[], []]), "")
